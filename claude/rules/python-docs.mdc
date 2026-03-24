@@ -36,7 +36,8 @@ def fetch_user(user_id: int, *, active_only: bool = True) -> User | None:
 
 - Comments explain **why**, not **what** — the code already shows what
 - Delete commented-out code; use git history instead
-- Use `# TODO(username): description` for known gaps; link to a ticket
+- Use `# TODO(username): description — <ticket>` for known tracked gaps in existing code; always include a ticket reference
+- **Never** use `# TODO: implement` or any untracked placeholder in generated code — that is banned by `python-no-placeholders.mdc`. The distinction: a TODO is a tracked engineering decision, not a code stub.
 
 ## Module-level
 

@@ -32,6 +32,11 @@ from typing import TypeAlias
 
 UserId: TypeAlias = int
 
-def get_user(user_id: UserId) -> User | None: ...
-def process(items: list[str]) -> dict[str, int]: ...
+def get_user(user_id: UserId) -> User | None:
+    ...  # full implementation required — see python-no-placeholders.mdc
+
+def process(items: list[str]) -> dict[str, int]:
+    ...  # full implementation required — see python-no-placeholders.mdc
 ```
+
+Note: `...` in the examples above marks where a real implementation goes. Ellipsis bodies are **only** valid in `Protocol` classes and `@abc.abstractmethod` stubs — never in concrete functions.

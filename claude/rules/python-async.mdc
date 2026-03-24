@@ -40,5 +40,15 @@ Use the right concurrency model for the problem. Mixing models incorrectly cause
 
 ## Testing async code
 
-- Use `pytest-asyncio` with `@pytest.mark.asyncio`
-- Set `asyncio_mode = "auto"` in `pytest.ini` to avoid decorating every test
+- This project uses `unittest` — run async tests with `unittest.IsolatedAsyncioTestCase` (Python 3.8+):
+
+```python
+import unittest
+
+class TestFetcher(unittest.IsolatedAsyncioTestCase):
+    async def test_fetch_returns_data(self) -> None:
+        result = await fetch("http://example.com")
+        self.assertIsNotNone(result)
+```
+
+- Do not introduce `pytest-asyncio` or any pytest plugin — see `python-unittest.mdc`
