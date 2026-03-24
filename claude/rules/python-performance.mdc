@@ -1,0 +1,45 @@
+---
+description: Python performance and efficiency best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Performance
+
+Measure before optimising. Never guess where the bottleneck is.
+
+## Profiling first
+
+- Use `cProfile` + `snakeviz` or `py-spy` for CPU profiles
+- Use `tracemalloc` or `memray` for memory profiles
+- Benchmark with `timeit` for micro-benchmarks; `pytest-benchmark` for suite-level
+
+## Algorithmic complexity
+
+- Fix O(n²) algorithms before reaching for C extensions or async tricks
+- Membership tests on `list` are O(n) — use `set` or `dict` for repeated lookups
+- Sort once; search many times with `bisect` on sorted lists
+
+## Built-ins and stdlib
+
+- Built-in functions (`sum`, `min`, `max`, `sorted`, `map`, `zip`) are implemented in C — prefer them over manual loops
+- Use `itertools` and `functools` for lazy chaining and caching:
+  - `itertools.chain`, `islice`, `groupby`
+  - `functools.lru_cache` / `functools.cache` for pure functions with repeated calls
+
+## String building
+
+- Never concatenate strings in a loop with `+` — use `"".join(parts)` or an `io.StringIO`
+- Use f-strings for formatting; avoid `%` formatting and `.format()` in new code
+
+## I/O
+
+- Batch reads/writes — avoid one syscall per item
+- Use buffered I/O (`open()` default) unless you need raw
+- For CPU-bound parallelism use `multiprocessing` or `concurrent.futures.ProcessPoolExecutor`
+- For I/O-bound concurrency prefer `asyncio` (see python-async rule)
+
+## When to drop to C
+
+- Use **NumPy** for numerical array operations — never loop over large arrays in pure Python
+- Consider **Cython**, **cffi**, or a Rust extension (`pyo3`) only after profiling confirms Python is the bottleneck

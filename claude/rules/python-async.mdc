@@ -1,0 +1,44 @@
+---
+description: Python async/await and concurrency best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Async & Concurrency
+
+Use the right concurrency model for the problem. Mixing models incorrectly causes subtle deadlocks and performance cliffs.
+
+## When to use what
+
+| Workload | Model |
+|---|---|
+| I/O-bound (network, disk, DB) | `asyncio` |
+| CPU-bound (computation) | `multiprocessing` / `ProcessPoolExecutor` |
+| Mixed / legacy blocking libs | `ThreadPoolExecutor` inside asyncio via `loop.run_in_executor` |
+| Simple parallelism | `concurrent.futures` |
+
+## asyncio rules
+
+- Mark I/O-bound coroutines with `async def`; call them with `await`
+- Never call blocking I/O inside a coroutine without wrapping it in `run_in_executor` — it stalls the entire event loop
+- Use `asyncio.gather()` for concurrent independent tasks; use `asyncio.TaskGroup` (Python 3.11+) for structured concurrency with automatic cancellation
+- Always cancel tasks on shutdown — leaked tasks mask errors and hold resources
+- Use `asyncio.timeout()` (3.11+) or `asyncio.wait_for()` for every external call
+
+## Common pitfalls
+
+- Do not use `time.sleep()` in async code — use `asyncio.sleep()`
+- Do not share mutable state between coroutines without `asyncio.Lock`
+- Do not create a new event loop per request — reuse one loop per process
+- Avoid `asyncio.get_event_loop()` in new code; use `asyncio.get_running_loop()` inside coroutines
+
+## Libraries
+
+- Use **httpx** (async) instead of `requests` for async HTTP clients
+- Use **asyncpg** or **SQLAlchemy async** for async database access
+- Use **aiofiles** for async file I/O
+
+## Testing async code
+
+- Use `pytest-asyncio` with `@pytest.mark.asyncio`
+- Set `asyncio_mode = "auto"` in `pytest.ini` to avoid decorating every test

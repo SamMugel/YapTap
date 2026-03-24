@@ -1,0 +1,37 @@
+---
+description: Python type hints and static typing best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Type Hints
+
+Type all public interfaces. Types are documentation that the compiler can check.
+
+## Rules
+
+- Annotate all function parameters and return types
+- Use `from __future__ import annotations` at the top of every file to enable PEP 563 deferred evaluation (avoids forward-reference strings)
+- Prefer built-in generics (`list[int]`, `dict[str, int]`, `tuple[str, ...]`) over `typing.List`, `typing.Dict`, etc. (Python 3.9+)
+- Use `X | Y` union syntax instead of `Union[X, Y]` (Python 3.10+)
+- Use `X | None` instead of `Optional[X]`
+- Use `TypeAlias` for complex reusable types rather than repeating them
+
+## Strict usage
+
+- Run **mypy** (or **pyright**) in strict mode on all new code
+- Do not use `Any` unless interfacing with untyped third-party code — document why with a comment
+- Use `cast()` sparingly; if you need it often, the design has a typing problem
+- Use `TypeVar` and `Generic` for reusable generic containers; use `Protocol` for structural subtyping instead of ABCs where possible
+
+## Common patterns
+
+```python
+from __future__ import annotations
+from typing import TypeAlias
+
+UserId: TypeAlias = int
+
+def get_user(user_id: UserId) -> User | None: ...
+def process(items: list[str]) -> dict[str, int]: ...
+```

@@ -1,0 +1,51 @@
+---
+description: Python data structure selection and idiomatic usage best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Data Structures
+
+Choose the right structure. The wrong choice makes code slow, fragile, and unreadable.
+
+## Choosing a structure
+
+| Need | Use |
+|---|---|
+| Ordered, mutable sequence | `list` |
+| Fixed, hashable sequence | `tuple` |
+| Unique membership, O(1) lookup | `set` |
+| Key→value mapping, O(1) lookup | `dict` |
+| FIFO queue | `collections.deque` |
+| Counting | `collections.Counter` |
+| Default values in dicts | `collections.defaultdict` |
+| Insertion-ordered dict (guaranteed 3.7+) | `dict` |
+| Heap / priority queue | `heapq` |
+
+## Idioms
+
+- Prefer **list/dict/set comprehensions** over `map()`/`filter()` with lambdas — they are more readable
+- Use **generator expressions** (`(x for x in ...)`) instead of list comprehensions when you only iterate once — avoids materialising the whole list
+- Use **unpacking** to destructure: `first, *rest = items`
+- Use `dict.get(key, default)` instead of `if key in dict: dict[key]`
+- Merge dicts with the `|` operator (Python 3.9+): `merged = a | b`
+
+## Mutability
+
+- Never use a mutable default argument: `def f(x=[])` is a classic bug — use `None` and initialise inside the function
+- Prefer immutable structures (tuples, frozensets) for data that should not change after creation
+- Use `dataclasses.dataclass(frozen=True)` or `typing.NamedTuple` for structured immutable records
+
+## Dataclasses
+
+Prefer `@dataclass` over plain classes for data-carrying objects:
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class Point:
+    x: float
+    y: float
+    tags: list[str] = field(default_factory=list)
+```

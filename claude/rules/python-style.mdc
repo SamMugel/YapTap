@@ -1,0 +1,35 @@
+---
+description: Python style and formatting best practices (PEP 8, naming, line length)
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Style & Formatting
+
+Follow PEP 8. Treat deviations as bugs.
+
+## Naming
+
+- `snake_case` for variables, functions, modules
+- `PascalCase` for classes
+- `SCREAMING_SNAKE_CASE` for module-level constants
+- Prefix private attributes/methods with a single underscore `_`; use double `__` only when name mangling is explicitly needed
+
+## Layout
+
+- Maximum line length: **88 characters** (Black default)
+- Two blank lines between top-level definitions; one blank line between methods
+- Imports at the top, grouped and sorted: stdlib → third-party → local, separated by blank lines
+
+## Formatting tools
+
+- Use **Black** for auto-formatting — do not fight it
+- Use **Ruff** for linting; prefer it over flake8/pylint for speed
+- Do not mix tabs and spaces — use spaces everywhere
+
+## Misc
+
+- Avoid trailing whitespace
+- End files with a single newline
+- Prefer `is` / `is not` when comparing to `None`, `True`, `False`
+- Use parentheses for implicit line continuation; never use `\`

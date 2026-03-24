@@ -1,0 +1,48 @@
+---
+description: Python import organization and module structure best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Imports & Module Structure
+
+Imports define the dependency graph of your program. Keep it clean and explicit.
+
+## Ordering (enforced by isort / Ruff)
+
+1. `__future__` imports
+2. Standard library
+3. Third-party packages
+4. Local application/library imports
+
+Separate each group with a blank line.
+
+## Rules
+
+- Use absolute imports everywhere — avoid relative imports except inside packages where they reduce coupling to the install name
+- Never use wildcard imports (`from module import *`) in production code — they pollute the namespace and make tooling unreliable
+- Import modules, not names, when the module provides useful namespace disambiguation:
+  ```python
+  # Prefer
+  import os.path
+  os.path.join(...)
+
+  # Over
+  from os.path import join  # join clashes with str.join mentally
+  ```
+- Only import what you use; remove dead imports immediately
+
+## Circular imports
+
+- Circular imports are a design smell — restructure the code rather than working around them with late imports inside functions
+- If a late import is unavoidable, document exactly why
+
+## `__all__`
+
+- Define `__all__` in every public module to declare the public API explicitly
+- This controls what `from module import *` exposes and helps IDEs and type checkers
+
+## Package structure
+
+- Every directory that is a package must have an `__init__.py`
+- Keep `__init__.py` minimal — it should re-export, not contain logic

@@ -1,0 +1,45 @@
+---
+description: Python security best practices to avoid common vulnerabilities
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Security
+
+Security is a correctness property, not a feature to add later.
+
+## Input validation
+
+- Never trust external input (user data, environment variables, file contents, network responses)
+- Validate and sanitise at system boundaries before passing data into business logic
+- Use **Pydantic** or similar for structured validation of external data
+
+## Injection
+
+- **SQL**: always use parameterised queries / ORM — never interpolate user input into SQL strings
+- **Shell**: avoid `subprocess` with `shell=True`; pass argument lists instead
+- **Eval**: never use `eval()` or `exec()` on untrusted input — there is no safe sandbox
+
+## Secrets
+
+- Never hardcode credentials, tokens, or keys in source code
+- Load secrets from environment variables or a secrets manager (AWS Secrets Manager, Vault, etc.)
+- Use `python-dotenv` for local development only; do not commit `.env` files
+- Use `secrets` module (not `random`) for cryptographically secure tokens
+
+## Cryptography
+
+- Do not roll your own crypto — use **cryptography** library or **PyNaCl**
+- Use `secrets.token_bytes()` / `secrets.token_hex()` for nonces and tokens
+- Hash passwords with `bcrypt`, `argon2-cffi`, or `hashlib.scrypt` — never MD5/SHA1 for passwords
+
+## Dependencies
+
+- Pin dependencies with a lockfile (`pip-tools`, `poetry`, `uv`)
+- Audit dependencies with `pip-audit` or `safety` in CI
+- Regularly update dependencies; subscribe to security advisories
+
+## Serialisation
+
+- Do not use `pickle` on untrusted data — it executes arbitrary code on deserialisation
+- Prefer `json`, `msgpack`, or `protobuf` for inter-service data exchange

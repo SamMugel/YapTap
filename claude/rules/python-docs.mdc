@@ -1,0 +1,48 @@
+---
+description: Python documentation and docstring best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Documentation
+
+Code is read far more than it is written. Documentation bridges intent and implementation.
+
+## Docstrings
+
+- Every public module, class, and function must have a docstring
+- Use **Google style** docstrings (preferred over NumPy and reStructuredText for readability):
+
+```python
+def fetch_user(user_id: int, *, active_only: bool = True) -> User | None:
+    """Fetch a user by ID from the database.
+
+    Args:
+        user_id: The primary key of the user.
+        active_only: If True, returns None for deactivated accounts.
+
+    Returns:
+        The User object, or None if not found (or deactivated).
+
+    Raises:
+        DatabaseError: If the database connection fails.
+    """
+```
+
+- The first line is a single imperative sentence ending with a period ("Fetch a user", not "Fetches" or "This function fetches")
+- Do not restate the type annotations in the docstring — the types are already in the signature
+
+## Comments
+
+- Comments explain **why**, not **what** — the code already shows what
+- Delete commented-out code; use git history instead
+- Use `# TODO(username): description` for known gaps; link to a ticket
+
+## Module-level
+
+- Every module should have a top-level docstring summarising its purpose and public API
+- Include usage examples in docstrings for non-obvious APIs using `Examples:` section
+
+## Type stubs
+
+- For libraries, provide `py.typed` marker and inline type annotations rather than separate `.pyi` stubs where possible

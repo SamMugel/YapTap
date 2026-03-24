@@ -1,0 +1,52 @@
+---
+description: Python error handling and exception best practices
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Error Handling
+
+Errors are not exceptional — handle them explicitly and close to where they occur.
+
+## Rules
+
+- Never use bare `except:` — always catch a specific exception type
+- Never silently swallow exceptions; at minimum log them with context
+- Catch the narrowest exception type possible
+- Use `except ExceptionType as err` and reference `err` in the handler
+- Re-raise with `raise ... from err` to preserve the exception chain
+- Use `finally` or context managers (`with`) to guarantee cleanup — never rely on `__del__`
+
+## Custom exceptions
+
+- Define domain-specific exception hierarchies rooted in a base class per module/package:
+  ```python
+  class AppError(Exception): ...
+  class ValidationError(AppError): ...
+  ```
+- Include a human-readable message and any structured context as attributes
+
+## What not to do
+
+```python
+# BAD
+try:
+    do_thing()
+except:
+    pass
+
+# BAD — too broad
+except Exception:
+    pass
+
+# GOOD
+try:
+    result = parse(data)
+except ValueError as err:
+    raise ValidationError(f"Invalid data: {data!r}") from err
+```
+
+## EAFP vs LBYL
+
+- Prefer **EAFP** (ask forgiveness, not permission) for the common case — use `try/except` rather than checking existence before access
+- Use **LBYL** only when the check itself is cheap and the exceptional path would be expensive
