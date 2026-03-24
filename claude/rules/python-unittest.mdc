@@ -1,7 +1,7 @@
 ---
 description: YapTap uses unittest (not pytest) — mocking strategy and test documentation standards
 globs: **/*.py
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Testing Framework — unittest
