@@ -1,0 +1,13 @@
+---
+description: MDC rules must be created in claude/rules, one file per rule
+globs:
+alwaysApply: true
+---
+
+# MDC Rule Location
+
+All MDC rules must be created as individual files in the `claude/rules/` directory.
+
+- Each rule gets its own `.mdc` file (e.g., `claude/rules/my-rule.mdc`)
+- Never combine multiple rules into a single file
+- Never create MDC rules outside of `claude/rules/`

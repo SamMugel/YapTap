@@ -1,0 +1,31 @@
+---
+description: After each change, automatically commit changed files using conventional commits with a message derived from the prompts that drove the change
+globs:
+alwaysApply: true
+---
+
+# Auto Git Commit After Changes
+
+After completing any file change, automatically stage and commit the changed files.
+
+## Commit title
+
+Use the Conventional Commits format:
+
+```
+<type>(<scope>): <short summary>
+```
+
+Common types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `style`, `ci`
+
+## Commit body
+
+- Explain **what** was changed (which files and what was modified in them)
+- Explain **why** by referencing the user's prompt(s) that drove the change — summarise the intent behind the request, not just the literal words
+
+## Rules
+
+- Stage only the files that were changed in this task — do not use `git add -A` or `git add .`
+- Always write the commit message via a heredoc to preserve formatting
+- Do not skip hooks (`--no-verify`)
+- Do not amend existing commits — always create a new commit
