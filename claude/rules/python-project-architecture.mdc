@@ -1,0 +1,55 @@
+---
+description: YapTap project structure, file size limits, co-located tests, and PRD alignment
+globs: **/*.py
+alwaysApply: false
+---
+
+# YapTap Project Architecture
+
+## Directory structure
+
+```
+src/
+  core/     — core application logic: whisper, ollama, clipboard, audio
+  ui/       — UI layer
+```
+
+Do not create modules outside of `src/core/` or `src/ui/` without explicit discussion.
+
+## File size
+
+- **Maximum 1000 lines per file**
+- If a file approaches this limit, split it by concern into separate modules — do not just push the limit
+
+## Co-located tests
+
+Tests live next to the source file they test, not in a separate `tests/` tree:
+
+```
+src/core/transcriber.py       ← implementation
+src/core/transcriber_test.py  ← tests for that module
+```
+
+- Test file name: `<module>_test.py` (not `test_<module>.py`)
+- Each test file tests exactly one module
+
+## PRD alignment
+
+- Do not add features that are not described in `PRD.md`
+- Do not remove behaviour that `PRD.md` specifies
+- If a request conflicts with `PRD.md`, flag the conflict before writing any code
+
+## Dependencies
+
+Only use the approved dependency set:
+- `openai-whisper` — local transcription
+- `ollama` — LLM client
+- `pyobjc` — macOS cursor/paste integration
+- `sounddevice` — audio capture
+- `numpy` — audio processing
+
+Introduce a new dependency only after explicit user approval.
+
+## Platform
+
+This is a **macOS-only** application. Do not add cross-platform abstractions or stubs for Linux/Windows unless explicitly requested.

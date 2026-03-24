@@ -10,7 +10,8 @@ Tests are first-class code. Treat test quality the same as production quality.
 
 ## Framework
 
-- Use **pytest** exclusively — do not use `unittest` for new code
+- **pytest** is the general recommendation for new Python projects
+- Project-specific rules (e.g., `python-unittest.mdc`) take precedence — follow the project's chosen framework
 - Use `pytest-cov` for coverage; aim for meaningful coverage, not 100% for its own sake
 - Use `pytest-xdist` for parallelism on large suites
 

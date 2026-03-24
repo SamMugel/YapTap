@@ -1,0 +1,63 @@
+---
+description: YapTap uses unittest (not pytest) — mocking strategy and test documentation standards
+globs: **/*.py
+alwaysApply: false
+---
+
+# Testing Framework — unittest
+
+This project uses **`unittest`**, not pytest. Do not introduce pytest or pytest plugins.
+
+## Structure
+
+```python
+import unittest
+from unittest.mock import MagicMock, patch
+
+class TestTranscriber(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.model = MagicMock()
+
+    def test_transcribe_returns_text_on_valid_audio(self) -> None:
+        """Tests the happy path: valid audio produces a non-empty transcript.
+
+        Why: Core contract of the transcription pipeline — any regression here
+        breaks the entire voice input flow.
+        """
+        ...
+
+    def test_transcribe_raises_on_empty_input(self) -> None:
+        """Tests that empty bytes raises ValueError.
+
+        Why: Downstream consumers assume non-empty output; silent failures
+        here produce corrupt clipboard state.
+        """
+        ...
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+## Mocking rules
+
+Always mock external dependencies — never let a test touch:
+- Whisper model (use `MagicMock` or `patch("whisper.load_model")`)
+- Ollama client (patch the `ollama` module)
+- Audio hardware (`sounddevice` — patch `sounddevice.rec` / `sounddevice.wait`)
+- Clipboard / cursor / macOS paste (`pyobjc` AppKit calls)
+- Filesystem (use `tempfile.TemporaryDirectory` or `unittest.mock.mock_open`)
+
+## Test isolation
+
+- No shared mutable state between tests
+- `setUp` / `tearDown` for per-test resources; `setUpClass` / `tearDownClass` only for expensive read-only fixtures
+- Each test must be runnable in isolation (`python -m unittest src.core.module_test.TestClass.test_method`)
+
+## Documenting why
+
+Every test method's docstring must answer two questions:
+1. **What** is being tested (one sentence)
+2. **Why** this test matters — what production failure it prevents
+
+This is not optional. A test without a "why" docstring is incomplete.

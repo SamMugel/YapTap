@@ -1,0 +1,50 @@
+---
+description: Rules for preserving and writing AI intent comments (INTENT, AI NOTE, AI CONTRACT)
+globs: **/*.py
+alwaysApply: false
+---
+
+# AI Intent Comments (CRITICAL)
+
+These comments are contracts between the human author and any AI agent that reads the code.
+Violating them is a correctness error, not a style issue.
+
+## Recognised markers
+
+- `# INTENT (for AI):` — explains the purpose, invariants, and safe-to-refactor boundaries of a block
+- `# AI NOTE:` — a pointed observation an AI must not overlook
+- `# AI CONTRACT:` — a hard constraint the AI must never violate
+
+## Preservation rules
+
+- **Never remove** any of these comments during refactors, reformats, or code generation
+- **Update** the comment whenever the behaviour it describes changes — a stale contract is worse than none
+- **Never generate code that contradicts** a stated constraint, even if the constraint looks suboptimal
+
+## When to add intent comments
+
+Add an intent comment for:
+- Every **public API** (function, class, method) in `src/`
+- All **core domain logic** (transcription pipeline, LLM interaction, clipboard/cursor integration)
+- Any **system integration point** (audio capture, macOS paste, Whisper, Ollama)
+
+## Template
+
+```python
+# INTENT (for AI):
+# - Purpose:   <what this does and why it exists>
+# - Invariants: <preconditions and postconditions that must always hold>
+# - Used by:   <callers / modules that depend on this>
+# - Safe to refactor: <yes|no — and why>
+```
+
+## Example
+
+```python
+# INTENT (for AI):
+# - Purpose:   Transcribe raw PCM audio bytes using the local Whisper model.
+# - Invariants: Input must be 16-bit mono PCM at 16 kHz. Returns empty string on silence.
+# - Used by:   AudioPipeline.on_audio_ready()
+# - Safe to refactor: Yes — internal impl only; callers depend only on the return type.
+def transcribe(audio: bytes) -> str: ...
+```

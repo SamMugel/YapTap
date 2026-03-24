@@ -1,0 +1,44 @@
+---
+description: No stubs, no bare pass, no TODO-implement placeholders — full implementations only
+globs: **/*.py
+alwaysApply: false
+---
+
+# No Placeholders
+
+Every piece of code Claude generates must be a complete, working implementation.
+Partial output is not a draft — it is broken code that will be committed and run.
+
+## Banned patterns
+
+```python
+# BANNED — bare stub
+def process(data: bytes) -> str:
+    pass
+
+# BANNED — TODO placeholder
+def process(data: bytes) -> str:
+    # TODO: implement
+    ...
+
+# BANNED — raise NotImplementedError as a permanent placeholder
+def process(data: bytes) -> str:
+    raise NotImplementedError
+
+# BANNED — ellipsis body in non-abstract, non-Protocol context
+def process(data: bytes) -> str:
+    ...
+```
+
+## What to do instead
+
+- If you cannot produce the full implementation in one response, say so and ask the user how to proceed
+- If a function is intentionally abstract, mark it with `@abc.abstractmethod` and document why
+- If a function is part of a `Protocol`, ellipsis bodies are acceptable — document that the class is a Protocol
+
+## Input validation and error handling
+
+Every generated function must include:
+1. **Input validation** at the top (raise `ValueError` / `TypeError` for invalid arguments)
+2. **Error handling** around external calls (Whisper, Ollama, audio, clipboard, filesystem)
+3. **A corresponding unit test** covering at least the happy path and one error path
