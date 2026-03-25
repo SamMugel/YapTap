@@ -1,0 +1,16 @@
+We are going to create an AI coding assistant command line application in rust
+
+The AI coding assistant is called "groundhog".
+
+It uses the "tracing" crate for logging, metrics and telemetry.
+All operations have appropriate tracing on them that can be used to troubleshoot the application.
+
+Use the clap cargo create for command line parsing.
+
+The first operation is
+
+"$ groundhogexplain"
+
+When groundhog explain is invoked it prints hello world.
+
+IMPORTANT: Write up the specifications into the "specs/" folder with each domain topic (including technical topic) as a seperate markdown file. Create a "SPECS.md" in the root of the directory which is an overview document that contains a table that links to all the specs.

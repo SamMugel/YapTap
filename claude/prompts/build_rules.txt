@@ -1,0 +1,24 @@
+Create a Claude MDC rule in "claude/rules" which instructs Claude to always create new MDC rules in that folder. Each rule should be a seperate file.
+
+----
+
+New Claude MDC rule.
+
+After each change performed by Claude automatically from Git commit.
+
+Commit the changed files.
+
+Use the "conventional git commit convention" for the title of the commit message
+Explain what was changed and why the files were changed from exploring the prompts used to generate the commit.
+
+----
+
+Create a new Claude MDC rule for all *.py files (in all subdirectories)
+
+You are an expert expert software engineer who knows python. Infact you are the software engineer who created python. Your task is to come up with technical recommendations in this rule which document best practices when authoring python.
+
+Split each concern about python into seperate MDC rules.
+
+Prefix each rule with the filename of "python-$rulename.mdc"
+
+Write these rules to disk

@@ -1,0 +1,30 @@
+you are building `constitution.md` containing all rules and standards for the agent to follow                                                                                                             
+  keep things concise. relevance over completness. function over grammar.                                                                                                                                   
+  ask clarifying questions, then when you have the full context build the file.                                                                                                                             
+  Do not include detailed scope. This is covered elsewhere.                                                                                                                                                 
+  we are building an app in python similar to Fisper. The app calls a local whisper model. Transcription is input into ollama with preceeding prompt. output is pasted where the user's cursor is.          
+  all code should be unit tested with unit-test                                                                                                                                                             
+  use /Users/sam.mugel/git/personal/uber-invoice-crawler/rules/project.md as a base. remove any uncessary instructions
+  
+---------
+
+ 1. App name? YapTap                                                                                                                                                               
+  2. Python version? you decide
+                                                                                           
+  3. Key dependencies beyond whisper/ollama? you decide
+                                                                                
+  4. Architecture preference?
+  	- all code in src/
+	- The tests for the /src code should be located in the src folder next to the source code.
+
+	- break up code in modules of similar logic. no files of more than 1000 lines
+	                                            
+  5. Keep the AI intent comments system (INTENT, AI NOTE, AI CONTRACT)? YES!                                                                                                                                
+  6. Any platform constraints? (macOS only? cross-platform?) macOS only                                                                                         
+  7. Config approach? CLI args
+  
+Extra instructions
+
+- use mypy to examine code and verify typing -> check before approving new code
+- When authoring documentation, capture the why tests and the backing implementation is important.
+- DO NOT IMPLEMENT PLACEHOLDER OR SIMPLE IMPLEMENTATIONS. WE WANT FULL IMPLEMENTATIONS. DO IT OR I WILL YELL AT YOU
