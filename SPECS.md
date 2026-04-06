@@ -4,7 +4,7 @@ YapTap is an AI writing assistant that records the user's voice, transcribes it,
 
 ## Authoritative Feature Reference
 
-[PRD.md](PRD.md) — the product requirements document. No feature may be coded unless it appears there.
+This file and the spec documents it links to are the authoritative feature reference. No feature may be coded unless it is described here or in a linked spec.
 
 ## Spec Documents
 

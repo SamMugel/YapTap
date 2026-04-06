@@ -1,5 +1,5 @@
 ---
-description: YapTap project structure, file size limits, co-located tests, and PRD alignment
+description: YapTap project structure, file size limits, co-located tests, and SPECS alignment
 globs: **/*.py
 alwaysApply: false
 ---
@@ -33,11 +33,11 @@ src/core/transcriber_test.py  ← tests for that module
 - Test file name: `<module>_test.py` (not `test_<module>.py`)
 - Each test file tests exactly one module
 
-## PRD alignment
+## Spec alignment
 
-- Do not add features that are not described in `PRD.md`
-- Do not remove behaviour that `PRD.md` specifies
-- If a request conflicts with `PRD.md`, flag the conflict before writing any code
+- Do not add features that are not described in `SPECS.md` or the spec documents it links to
+- Do not remove behaviour that those specs define
+- If a request conflicts with the specs, flag the conflict before writing any code
 
 ## Dependencies
 

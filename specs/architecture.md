@@ -1,5 +1,11 @@
 # Architecture
 
+## Platform
+
+**macOS only.** Do not add cross-platform abstractions or stubs for Linux/Windows unless explicitly requested.
+
+---
+
 ## Language Boundary Rule
 
 | Concern | Language | Reason |
