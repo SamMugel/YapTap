@@ -1,5 +1,5 @@
 ---
-description: PRD task files live in PRD/, one per phase. Claude must not modify them except to update task status between "to do" and "done".
+description: PRD task files live in PRD/, one per phase. Tasks track implementation status.
 globs:
 alwaysApply: true
 ---
@@ -9,19 +9,4 @@ alwaysApply: true
 ## Location and structure
 
 - All implementation task documents live in `PRD/`
-- One file per implementation phase (e.g. `PRD/phase1.md`, `PRD/phase2.md`)
-
-## CRITICAL — modification restrictions
-
-**Do not modify any file in `PRD/` unless the user explicitly asks.**
-
-The only permitted unsolicited edit is updating a task's status field between:
-
-- `to do`
-- `done`
-
-All other content — task descriptions, scope, order, acceptance criteria — is off-limits unless the user explicitly requests a change.
-
-## What "explicitly asked" means
-
-The user must directly instruct a PRD change in their message. Inferring that a PRD update is implied by other work does not count. When in doubt, do not touch the file.
+- One file per implementation phase (e.g. `PRD/PRD_1.json`, `PRD/PRD_2.json`)
