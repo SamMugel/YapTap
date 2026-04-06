@@ -4,7 +4,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(no pass, no TODO: implement\" rule. Lists banned patterns explicitly and:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git push:*)",
+      "Bash(claude doctor:*)"
     ]
   }
 }

@@ -1,0 +1,53 @@
+---
+description: Rust module system, visibility, crate organisation, and API design
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Modules & Crate Organisation
+
+A well-organised crate is self-documenting. Visibility rules enforce the contract.
+
+## Module layout
+
+- Use `src/lib.rs` for library crates, `src/main.rs` for binaries, `src/bin/<name>.rs` for multiple binaries
+- Split large modules into files: `mod foo;` in `lib.rs` picks up `src/foo.rs` or `src/foo/mod.rs`
+- Prefer `src/foo.rs` over `src/foo/mod.rs` (the non-`mod.rs` style) — it avoids multiple files named `mod.rs` which confuse editors
+- Keep each module focused on one responsibility — if a module has sub-modules that have sub-modules, the top level is likely too broad
+
+## Visibility
+
+- Default to the minimum visibility: `pub(crate)` > `pub(super)` > `pub`
+- Never make a field `pub` on a struct with invariants — use accessor methods
+- `pub use` re-exports in `lib.rs` to flatten the public API; do not expose internal module paths to users
+- Use `#[non_exhaustive]` on public enums and structs that you may extend in future semver-compatible releases
+
+## `use` declarations
+
+- Import types, not modules, for standard usage: `use std::collections::HashMap` not repeated `std::collections::HashMap::new()`
+- Use glob imports (`use foo::*`) only in `#[cfg(test)] mod tests` and prelude modules
+- Group imports: `std` → external crates → crate-local (`crate::`, `super::`, `self::`)
+
+## Public API design
+
+- Seal traits that are not meant to be implemented outside the crate using the sealed trait pattern:
+  ```rust
+  mod private { pub trait Sealed {} }
+  pub trait MyTrait: private::Sealed { ... }
+  ```
+- Use the builder pattern for constructing types with many optional parameters — avoid functions with >3–4 parameters
+- Return `impl Trait` from public functions rather than concrete types when the concrete type is an implementation detail
+- Add `#[must_use]` to types and functions whose return values must not be silently discarded
+
+## Workspace organisation
+
+- Split a large project into a Cargo workspace with focused crates: `crates/core`, `crates/server`, `crates/cli`
+- Keep the `Cargo.toml` dependency list in `[workspace.dependencies]` and inherit with `foo = { workspace = true }` to keep versions consistent
+- Each crate should compile and test independently — avoid circular dependencies between workspace crates
+
+## Documentation
+
+- Every `pub` item must have a `///` doc comment
+- Start with a one-sentence summary, then a blank line, then details and examples
+- Include `# Examples` sections with runnable code for non-trivial APIs — they are tested by `cargo test`
+- Use `# Errors` and `# Panics` sections to document failure modes on `pub fn`s that return `Result` or may panic

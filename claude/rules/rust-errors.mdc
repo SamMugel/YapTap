@@ -1,0 +1,70 @@
+---
+description: Rust error handling with Result, Option, ?, thiserror, and anyhow
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Error Handling
+
+Errors are values. Model them precisely in library code; aggregate them pragmatically in application code.
+
+## The fundamental split
+
+| Context | Crate | Pattern |
+|---|---|---|
+| Library crate | `thiserror` | Typed, structured `enum` errors |
+| Application / binary | `anyhow` | `anyhow::Result<T>` with context |
+
+Never use `anyhow` in a library crate — it erases type information that callers need.
+
+## Rules
+
+- Never use `.unwrap()` in library code — use `?`, `expect("reason")` only in tests or `main`
+- `expect("msg")` is better than `.unwrap()` when a panic is the intended behaviour; the message should explain the invariant that was violated
+- Never use `panic!()` to signal recoverable errors; reserve it for true invariant violations
+- Propagate errors with `?` — avoid manual `match` on `Result` unless you need to transform the error
+- Add context to errors at every layer they cross: use `.context("while doing X")` (anyhow) or `map_err(|e| MyError::Step { source: e })` (thiserror)
+
+## Defining errors with thiserror
+
+```rust
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("config file not found at {path}")]
+    ConfigMissing { path: PathBuf },
+
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+
+    #[error("parse failed: {0}")]
+    Parse(#[from] serde_json::Error),
+}
+```
+
+- Each variant carries enough structured data for the caller to branch on it
+- Use `#[from]` for transparent wrapping of standard library / third-party errors
+- Implement `std::error::Error` via `thiserror` — do not hand-roll `Display` + `Error`
+
+## Option
+
+- Use `Option` for values that are legitimately absent; use `Result` when absence is an error
+- Prefer `Option` combinators over `match`: `.map()`, `.and_then()`, `.unwrap_or_else()`, `.ok_or_else()`
+- Convert `Option` to `Result` with `.ok_or_else(|| MyError::Missing)` at the boundary where absence becomes an error
+
+## What not to do
+
+```rust
+// BAD — silently discards errors
+let _ = do_thing();
+
+// BAD — opaque panic message
+some_option.unwrap();
+
+// BAD — string errors lose structure
+return Err("something went wrong".into());
+
+// GOOD — structured, propagated
+let val = do_thing().context("fetching widget")?;
+```

@@ -1,0 +1,136 @@
+---
+description: Python configuration management — env vars, config files, validation, and secrets
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Configuration Management
+
+Configuration is not code. Keep it out of source files and validate it at startup.
+
+## Sources of configuration (in priority order)
+
+1. **Environment variables** — the canonical source for secrets and environment-specific values (12-factor)
+2. **Config files** (TOML, YAML, JSON) — for complex structured config that changes per deployment
+3. **Defaults in code** — hardcoded fallbacks for development convenience only; never for secrets
+
+Never hardcode secrets, credentials, or environment-specific URLs in source — see `python-security.mdc`.
+
+## Loading environment variables
+
+Use `python-dotenv` for local development `.env` files (requires explicit user approval to add — see `python-project-architecture.mdc`); never commit `.env`:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()  # only reads .env in local dev; no-op if file absent
+```
+
+Access variables with explicit defaults and type coercion at the boundary:
+
+```python
+import os
+
+DATABASE_URL: str = os.environ["DATABASE_URL"]          # required — KeyError on missing
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")         # optional with default
+MAX_WORKERS: int = int(os.getenv("MAX_WORKERS", "4"))   # typed
+DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+```
+
+Never scatter `os.environ` calls throughout the codebase — centralise all config loading in one module.
+
+## Config module pattern
+
+Define a single config object loaded once at import time:
+
+```python
+# config.py
+from __future__ import annotations
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Config:
+    database_url: str
+    log_level: str
+    max_workers: int
+    debug: bool
+
+    @classmethod
+    def from_env(cls) -> Config:
+        return cls(
+            database_url=os.environ["DATABASE_URL"],
+            log_level=os.getenv("LOG_LEVEL", "INFO"),
+            max_workers=int(os.getenv("MAX_WORKERS", "4")),
+            debug=os.getenv("DEBUG", "false").lower() == "true",
+        )
+
+
+config = Config.from_env()
+```
+
+- `frozen=True` prevents accidental mutation after startup
+- Fail fast at import time on missing required variables — never fail late during a request
+- Use `Config.from_env()` in tests to inject a different environment
+
+## Config files
+
+Use TOML for structured config (Python 3.11+ has `tomllib` in stdlib):
+
+```python
+import tomllib  # Python 3.11+; use tomli for < 3.11
+
+with open("config.toml", "rb") as f:
+    raw = tomllib.load(f)
+```
+
+Prefer TOML over YAML (no implicit type coercion surprises) and over JSON (supports comments).
+
+## Validation
+
+Validate config at startup — not on first use:
+
+```python
+@classmethod
+def from_env(cls) -> Config:
+    max_workers = int(os.getenv("MAX_WORKERS", "4"))
+    if max_workers < 1:
+        raise ValueError(f"MAX_WORKERS must be >= 1, got {max_workers}")
+    ...
+```
+
+A startup crash with a clear message is far better than a mysterious runtime failure during production load.
+
+## Secrets
+
+- Load secrets from environment variables or a secrets manager (AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager)
+- Never log config objects that may contain secrets — implement `__repr__` to redact sensitive fields:
+  ```python
+  def __repr__(self) -> str:
+      return f"Config(database_url=***, log_level={self.log_level!r}, ...)"
+  ```
+- Rotate secrets by restarting the process — do not reload secrets mid-run unless using a secrets manager SDK designed for rotation
+
+## Environment separation
+
+- Use environment variables (not separate config files) to distinguish `development`, `staging`, and `production`
+- Use a single `APP_ENV` variable to select profiles if needed; never branch on hostnames
+- Keep config files in version control for non-secret structured config; keep secret values out of version control entirely
+
+## What not to do
+
+```python
+# BAD — secrets in source
+DATABASE_URL = "postgresql://user:s3cr3t@prod-host/db"
+
+# BAD — scattered reads
+def get_user(uid):
+    url = os.environ["DATABASE_URL"]  # should be loaded once at startup
+    ...
+
+# BAD — silent fallback masks misconfiguration
+api_key = os.getenv("API_KEY", "")  # empty string is not a valid key
+
+# GOOD — fail loudly on missing required config
+api_key = os.environ["API_KEY"]
+```

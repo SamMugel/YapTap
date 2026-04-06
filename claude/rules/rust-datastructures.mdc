@@ -1,0 +1,69 @@
+---
+description: Rust collection and data structure selection best practices
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Data Structures
+
+Pick the right collection first. The wrong choice propagates through APIs and is expensive to change.
+
+## Choosing a collection
+
+| Need | Use |
+|---|---|
+| Ordered, growable sequence | `Vec<T>` |
+| FIFO queue / deque | `VecDeque<T>` |
+| Key → value, fast lookup | `HashMap<K, V>` |
+| Key → value, sorted order | `BTreeMap<K, V>` |
+| Unique membership, fast test | `HashSet<T>` |
+| Unique membership, sorted | `BTreeSet<T>` |
+| Small set, stack-allocated | `[T; N]` or `SmallVec<[T; N]>` |
+| Append-only, shared | `Arc<Vec<T>>` + clone-on-write |
+| Priority queue | `BinaryHeap<T>` |
+| Read-heavy, rare writes | `RwLock<HashMap<K, V>>` or `dashmap::DashMap` |
+
+## `Vec<T>`
+
+- Pre-allocate with `Vec::with_capacity(n)` when the size is known — avoids O(log n) reallocations
+- Use `vec![val; n]` to create a filled vector; prefer it over a loop + push
+- Use `retain(pred)` to remove elements in place instead of `collect` into a new `Vec`
+- Avoid `remove(i)` — it is O(n); use `swap_remove(i)` if order does not matter (O(1))
+
+## `HashMap<K, V>`
+
+- Use `entry()` API to avoid double-lookups:
+  ```rust
+  // BAD — two lookups
+  if !map.contains_key(&key) { map.insert(key, default()); }
+  // GOOD — one lookup
+  map.entry(key).or_insert_with(default);
+  ```
+- Use `HashMap::with_capacity(n)` for known sizes
+- The default hasher (`SipHash`) is DoS-resistant but not the fastest; use `rustc-hash` / `ahash` for non-adversarial hot paths
+- `BTreeMap` is better than `HashMap` when you need sorted iteration or range queries
+
+## Strings
+
+- Use `String` for owned, growable UTF-8 text; `&str` for borrowed slices
+- Use `Cow<'_, str>` when a function may need to return either a borrowed or an owned string
+- Use `bytes::Bytes` for cheaply cloneable, reference-counted byte buffers (network data, etc.)
+- Avoid `String` → `Vec<u8>` conversions in hot paths; work with bytes directly when the data is binary
+
+## Graphs & trees
+
+- `Vec<Vec<usize>>` (adjacency list) is the simplest graph representation for most algorithms
+- Use the `petgraph` crate for general graph algorithms (BFS, DFS, Dijkstra, toposort)
+- Represent arenas / typed indices with the `slotmap` or `typed_arena` crate — not raw `Vec` indices
+
+## Custom data structures
+
+- Prefer composition over raw pointer manipulation
+- If you need a linked list, use `std::collections::LinkedList` (rarely the right choice) or `VecDeque`
+- If you are writing a lock-free structure, use `crossbeam` primitives — do not roll your own atomics unless you have deeply read the memory model
+
+## Serialisation hygiene
+
+- Derive `serde::Serialize` / `serde::Deserialize` on data structs; do not hand-roll `serde` impls unless unavoidable
+- Use `#[serde(deny_unknown_fields)]` on inbound types to catch schema drift early
+- Use `#[serde(rename_all = "camelCase")]` at the struct level rather than per-field renames

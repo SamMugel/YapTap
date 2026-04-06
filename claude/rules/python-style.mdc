@@ -19,7 +19,7 @@ Follow PEP 8. Treat deviations as bugs.
 
 - Maximum line length: **88 characters** (Black default)
 - Two blank lines between top-level definitions; one blank line between methods
-- Imports at the top, grouped and sorted: stdlib → third-party → local, separated by blank lines
+- Imports at the top, grouped and sorted: `__future__` → stdlib → third-party → local, separated by blank lines
 
 ## Formatting tools
 

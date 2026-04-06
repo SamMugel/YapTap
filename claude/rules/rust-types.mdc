@@ -1,0 +1,67 @@
+---
+description: Rust type system, traits, generics, and newtype patterns
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Types & Traits
+
+The type system is the design tool. Make illegal states unrepresentable.
+
+## Newtype pattern
+
+- Wrap primitives in newtypes to prevent mix-ups: `struct UserId(u64)` not `type UserId = u64`
+- Implement `Display`, `Debug`, `From`/`Into`, and `Deref` on newtypes as appropriate
+- Use `#[repr(transparent)]` when the newtype must have the same memory layout as the inner type
+
+## Enums over booleans
+
+- Replace `bool` parameters that encode state with an enum:
+  ```rust
+  // BAD
+  fn connect(host: &str, tls: bool) { ... }
+  // GOOD
+  enum Tls { Enabled, Disabled }
+  fn connect(host: &str, tls: Tls) { ... }
+  ```
+- Use `enum` to model all variants of a domain concept — the compiler will enforce exhaustiveness
+
+## Structs
+
+- Prefer named fields over tuple structs for anything with more than one field
+- Use `#[derive(Debug, Clone, PartialEq)]` as the default; add `Eq`, `Hash`, `Ord` when semantically correct
+- Use `Default` derive or implement it when a zero/empty value is meaningful
+- Use the builder pattern (or `..Default::default()`) for structs with many optional fields
+
+## Generics
+
+- Use generics for compile-time polymorphism; use `dyn Trait` (trait objects) only when you genuinely need runtime dispatch or heterogeneous collections
+- Bound at the call site, not the struct definition, unless the bound is a core invariant of the type
+- Prefer `impl Trait` in argument position over `&dyn Trait` to keep dispatch static:
+  ```rust
+  // Prefer this
+  fn process(item: impl Read) { ... }
+  // Over this (unless heterogeneous)
+  fn process(item: &dyn Read) { ... }
+  ```
+- Use `where` clauses when bounds become too long to fit on the signature line
+
+## Trait design
+
+- Design small, focused traits — one responsibility per trait (like `Iterator`, `Display`, `From`)
+- Implement standard library traits (`Display`, `From`, `Into`, `Iterator`, `Index`) before inventing custom ones
+- Do not add blanket implementations carelessly — they affect all downstream crates
+- Use associated types (`type Item`) instead of type parameters on traits when there is only one natural choice per implementation
+
+## Phantom types & type state
+
+- Use `PhantomData<T>` to carry type information without runtime cost
+- Use type-state patterns to encode protocol correctness at compile time:
+  ```rust
+  struct Connection<State> { inner: TcpStream, _state: PhantomData<State> }
+  struct Connected;
+  struct Disconnected;
+  impl Connection<Disconnected> {
+      fn connect(self) -> Connection<Connected> { ... }
+  }
+  ```

@@ -1,0 +1,71 @@
+---
+description: Rust async/await, tokio, and concurrency best practices
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Async & Concurrency
+
+Rust async is zero-cost but not zero-complexity. Choose the right model before writing a single `async fn`.
+
+## When to use async
+
+| Workload | Model |
+|---|---|
+| I/O-bound (network, disk, DB) | `async`/`await` with tokio |
+| CPU-bound computation | `rayon` thread pool or `std::thread::spawn` |
+| CPU-bound inside async | `tokio::task::spawn_blocking` |
+| Shared state across threads | `Arc<Mutex<T>>` or `Arc<RwLock<T>>` |
+| Message passing | `tokio::sync::mpsc` / `tokio::sync::oneshot` |
+
+## Rules
+
+- Never call blocking I/O or `std::thread::sleep` inside an `async fn` — it starves the executor
+- Use `tokio::time::sleep` / `tokio::time::timeout` for all async timing
+- Wrap every long CPU operation with `tokio::task::spawn_blocking` so it runs on the blocking thread pool
+- Prefer structured concurrency with `tokio::task::JoinSet` or `futures::future::join_all` over unbounded spawning
+- Always `await` or explicitly drop `JoinHandle`s — orphaned tasks hide errors and leak resources
+- Apply `tokio::time::timeout` to every external call; never await without a deadline
+
+## Cancellation safety
+
+- Know which futures are cancellation-safe: `tokio::sync::Mutex::lock` is; most I/O futures are not when partially complete
+- Use `tokio::select!` carefully — a branch that is cancelled mid-way may leave state inconsistent
+- Document `// cancellation safe` or `// NOT cancellation safe` on any `async fn` that is `select!`-ed
+
+## Channels
+
+- Use `mpsc` for fan-in (many producers, one consumer)
+- Use `broadcast` for fan-out (one producer, many consumers)
+- Use `oneshot` for a single response to a request
+- Always handle the `Err` from channel sends — a dropped receiver is a logic error, not noise
+
+## Trait objects and async
+
+- `async fn` in traits requires the `async-trait` crate OR Rust 1.75+ return-position `impl Trait` in traits
+- Prefer static dispatch (`impl Future`) over `Box<dyn Future>` in hot paths
+
+## Testing async code
+
+```rust
+#[tokio::test]
+async fn test_fetch() {
+    let result = fetch("http://example.com").await.unwrap();
+    assert!(!result.is_empty());
+}
+
+// For timeouts in tests:
+#[tokio::test(flavor = "multi_thread")]
+async fn test_with_timeout() {
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        fetch("http://example.com"),
+    )
+    .await
+    .expect("timed out")
+    .expect("fetch failed");
+}
+```
+
+- Use `#[tokio::test]` for unit tests; use `tokio::test(flavor = "multi_thread")` only when you need real parallelism
+- Never spawn a real `tokio::Runtime` inside a `#[tokio::test]` — use `tokio::runtime::Handle::current()` instead

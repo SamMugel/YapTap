@@ -1,0 +1,106 @@
+---
+description: Rust structured logging and instrumentation with the tracing crate
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Logging & Tracing
+
+Use `tracing` for all instrumentation. It supersedes the `log` crate and is the ecosystem standard.
+
+## Crate selection
+
+| Crate | Role |
+|---|---|
+| `tracing` | Instrumentation API — use this in libraries and application code |
+| `tracing-subscriber` | Subscriber (sink) wiring — use this in binaries and integration tests only |
+| `tracing-appender` | Non-blocking file appender for production |
+| `tracing-bunyan-formatter` | JSON output for structured log ingestion |
+| `tracing-opentelemetry` | Export spans to OpenTelemetry collectors |
+
+Never use `println!` or `eprintln!` for observability. Never use the `log` crate in new code.
+
+## Log levels — when to use each
+
+| Level | Use for |
+|---|---|
+| `error!` | Unrecoverable errors that require immediate attention |
+| `warn!` | Recoverable but unexpected conditions; degraded operation |
+| `info!` | Key lifecycle events (server started, job completed, user action) |
+| `debug!` | Detailed operational state useful during development |
+| `trace!` | Very high-frequency, per-item detail (loop bodies, hot paths) |
+
+`info!` should be sparse enough to read in production. `debug!` / `trace!` must be free to leave in the codebase — they are compiled out at the subscriber level.
+
+## Structured fields
+
+Always log structured key-value fields rather than interpolated strings:
+
+```rust
+// BAD — unstructured, hard to query
+info!("Processing request {} for user {}", req_id, user_id);
+
+// GOOD — structured fields
+info!(request_id = %req_id, user_id = %user_id, "Processing request");
+```
+
+- Use `%` for `Display` values, `?` for `Debug` values, plain assignment for primitives
+- Attach IDs, counts, and durations as fields — not embedded in the message string
+- Keep the message string constant and human-readable; put the variables in fields
+
+## `#[instrument]`
+
+Use `#[instrument]` to automatically create a span for a function:
+
+```rust
+use tracing::instrument;
+
+#[instrument(skip(db), fields(user_id = %req.user_id))]
+async fn handle_request(req: Request, db: &Database) -> Result<Response> {
+    // span is active for the duration of this function
+    debug!("Validating request");
+    let user = db.get_user(req.user_id).await?;
+    info!(role = %user.role, "User authenticated");
+    Ok(process(user))
+}
+```
+
+- `skip(arg)` to exclude sensitive or large arguments from the span
+- `fields(key = value)` to add extra structured fields to the span
+- Use `#[instrument(level = "debug")]` for noisy functions so they only appear at debug level
+- Do not `#[instrument]` extremely hot inner-loop functions — span creation has overhead
+
+## Subscriber setup (binaries only)
+
+```rust
+use tracing_subscriber::{fmt, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
+fn init_tracing() {
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(fmt::layer().json())  // structured JSON for production
+        .init();
+}
+```
+
+- Configure subscribers only in `main` or test harness — never in library code
+- Use `EnvFilter` so log levels are controlled at runtime via `RUST_LOG=myapp=debug,warn`
+- Use `.json()` in production; use `.pretty()` or `.compact()` during local development
+
+## Spans and context propagation
+
+- Create spans explicitly for logical units of work that cross function boundaries:
+  ```rust
+  let span = tracing::info_span!("database_query", table = %table_name);
+  let _guard = span.enter(); // synchronous code
+  // OR
+  async_fn().instrument(span).await; // async code
+  ```
+- Use `.instrument(span)` on futures — never `.enter()` across `.await` points (it will attach the wrong span to resumed tasks)
+- Propagate trace context across service boundaries with `tracing-opentelemetry` + W3C TraceContext headers
+
+## Libraries
+
+- Libraries must never call `tracing_subscriber::init()` or configure any subscriber
+- Libraries call `tracing::info!(...)` etc. — the application decides how/where to emit events
+- Gate expensive span construction behind `tracing::enabled!(Level::DEBUG)` checks in hot paths

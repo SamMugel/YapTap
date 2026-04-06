@@ -22,3 +22,25 @@ Split each concern about python into seperate MDC rules.
 Prefix each rule with the filename of "python-$rulename.mdc"
 
 Write these rules to disk
+
+----
+
+read all rules in "claude/rules"
+
+Create a new Claude MDC rule for all *.rs files (in all subdirectories)
+
+You are an expert expert software engineer who knows rust. Infact you are the software engineer who created rust. Your task is to come up with technical recommendations in this rule which document best practices when authoring rust.
+
+Split each concern about rust into seperate MDC rules.
+
+Prefix each rule with the filename of "rust-$rulename.mdc"
+
+Write these rules to disk
+
+----
+
+review all rules. Is there anything missing? Implement any recommendations
+
+----
+
+review all rules. Are there any inconsistencies? Implement any recommendations

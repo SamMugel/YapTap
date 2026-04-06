@@ -1,0 +1,74 @@
+---
+description: Rust performance, zero-cost abstractions, allocations, and profiling
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Performance
+
+Rust gives you zero-cost abstractions — but only if you do not accidentally pay for things you did not ask for.
+
+## Profiling first
+
+- Profile with `cargo flamegraph` or `perf` before optimising anything
+- Use `criterion` for micro-benchmarks: `cargo bench` with `criterion::Criterion`
+- Inspect assembly with `cargo asm` or `godbolt.org` when questioning whether a pattern is inlined
+- Benchmark on release builds (`cargo bench` / `cargo build --release`) — debug builds are not representative
+
+## Allocation
+
+- Every `Box`, `Vec`, `String`, `Arc`, `Rc`, `HashMap` allocation has a cost — be conscious of allocations in hot paths
+- Reuse buffers: pass `&mut Vec<u8>` / `&mut String` into functions to append rather than returning new allocations
+- Use `Cow<'_, str>` / `Cow<'_, [T]>` when a function may or may not need to own its data
+- Use `SmallVec` (crate) for collections that are almost always small and rarely overflow the stack buffer
+- Avoid `format!()` in hot paths — write to a `Write` implementor directly or use `itoa`/`ryu` for numbers
+
+## Iterators
+
+- Iterator chains compile to tight loops — prefer them over manual `for` loops; they give the compiler more optimisation surface
+- Use `.collect::<Vec<_>>()` only when you genuinely need a materialised collection; prefer chaining if you iterate once
+- Use `iter()` / `iter_mut()` / `into_iter()` correctly — returning an owned iterator (`into_iter`) forces a move; prefer borrows when downstream only reads
+
+## String handling
+
+- Prefer `&str` slices over `String` ownership in functions that only read
+- Use `String::with_capacity(n)` when the final size is known to avoid reallocations
+- Use `write!` / `writeln!` to a `String` (which implements `Write`) rather than repeated `push_str`
+
+## Struct layout
+
+- Order struct fields largest to smallest to minimise padding (or derive `#[repr(C)]` deliberately)
+- Use `#[repr(packed)]` only when marshalling wire formats — it disables alignment guarantees and can cause UB on some architectures
+- Keep hot data together (data-oriented design): if you iterate over one field of all items, consider a struct-of-arrays layout
+
+## Branch prediction & SIMD
+
+- Annotate cold code paths with `#[cold]` and hot ones with `#[inline]` or `#[inline(always)]`
+- Use `likely!` / `unlikely!` via `std::hint::likely` (stable 1.84+) for branch hints in tight loops
+- For SIMD, use `std::simd` (portable SIMD, nightly) or `packed_simd` / vendor intrinsics only after profiling confirms the bottleneck
+
+## Avoiding common pitfalls
+
+```rust
+// BAD — allocates a String on every call
+fn is_prefix(s: &str) -> bool {
+    s.to_lowercase().starts_with("http")
+}
+// GOOD — no allocation
+fn is_prefix(s: &str) -> bool {
+    s.len() >= 4 && s[..4].eq_ignore_ascii_case("http")
+}
+
+// BAD — repeated heap allocation in loop
+for item in items {
+    let s = format!("{}", item);
+    sink.write_all(s.as_bytes())?;
+}
+// GOOD
+let mut buf = String::new();
+for item in items {
+    buf.clear();
+    write!(&mut buf, "{}", item)?;
+    sink.write_all(buf.as_bytes())?;
+}
+```

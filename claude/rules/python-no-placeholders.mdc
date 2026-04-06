@@ -1,7 +1,7 @@
 ---
 description: No stubs, no bare pass, no TODO-implement placeholders — full implementations only
 globs: **/*.py
-alwaysApply: false
+alwaysApply: true
 ---
 
 # No Placeholders

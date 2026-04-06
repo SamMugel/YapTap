@@ -1,0 +1,125 @@
+---
+description: Python logging best practices covering log levels, structured output, and sinks
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python Logging
+
+Use the standard `logging` module. Treat log output as machine-readable infrastructure, not print statements.
+
+## Setup
+
+- Always get a logger per module — never use the root logger directly:
+  ```python
+  import logging
+  logger = logging.getLogger(__name__)
+  ```
+- Configure handlers and formatters only in application entry points (`main`, `app factory`) — never in library code
+- Libraries call `logger.info(...)` etc. and add a `NullHandler` to suppress output when no application configures logging:
+  ```python
+  logging.getLogger(__name__).addHandler(logging.NullHandler())
+  ```
+
+## Log levels — when to use each
+
+| Level | Use for |
+|---|---|
+| `CRITICAL` | Unrecoverable errors; application cannot continue |
+| `ERROR` | Errors that require attention but allow continued operation |
+| `WARNING` | Unexpected conditions; degraded or fallback behaviour |
+| `INFO` | Key lifecycle events (server started, job finished, user action) |
+| `DEBUG` | Detailed operational state useful during development |
+
+`INFO` should be sparse enough to read in production. `DEBUG` can be verbose and is gated by configuration.
+
+## Structured logging
+
+Log key-value context as `extra` fields, not embedded in the message string:
+
+```python
+# BAD — unstructured, hard to query
+logger.info(f"Processing request {req_id} for user {user_id}")
+
+# GOOD — structured extra fields
+logger.info("Processing request", extra={"request_id": req_id, "user_id": user_id})
+```
+
+For production services, emit JSON logs using `python-json-logger` (requires explicit user approval to add — see `python-project-architecture.mdc`):
+
+```python
+from pythonjsonlogger import jsonlogger
+
+handler = logging.StreamHandler()
+handler.setFormatter(jsonlogger.JsonFormatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+logging.getLogger().addHandler(handler)
+```
+
+## Log message style
+
+- Keep the message string constant and human-readable; put the variables in `extra`
+- Do not use f-strings or `%` formatting to embed runtime values in the message — it breaks log aggregators that group by message template
+- Include enough context to diagnose the issue without opening the code
+
+## Exception logging
+
+- Use `logger.exception("msg")` inside `except` blocks — it automatically includes the full traceback:
+  ```python
+  try:
+      result = parse(data)
+  except ValueError:
+      logger.exception("Failed to parse data", extra={"raw": data})
+      raise
+  ```
+- Never use `logger.error("msg", exc_info=False)` unless you explicitly want to suppress the traceback
+
+## Performance
+
+- Guard expensive debug log construction with `logger.isEnabledFor(logging.DEBUG)`:
+  ```python
+  if logger.isEnabledFor(logging.DEBUG):
+      logger.debug("State snapshot", extra={"state": compute_expensive_snapshot()})
+  ```
+- Never build complex objects solely to pass to a log call at a level that is disabled
+
+## Configuration (application entry points only)
+
+```python
+import logging.config
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"()": "pythonjsonlogger.jsonlogger.JsonFormatter"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "json"},
+    },
+    "root": {"level": "INFO", "handlers": ["console"]},
+    "loggers": {
+        "myapp": {"level": "DEBUG", "propagate": True},
+    },
+}
+logging.config.dictConfig(LOGGING)
+```
+
+- Use `dictConfig` — it is declarative and overridable without code changes
+- Set `disable_existing_loggers: False` to avoid silencing third-party library loggers
+- Control third-party verbosity by setting their logger level explicitly: `logging.getLogger("urllib3").setLevel(logging.WARNING)`
+
+## What not to do
+
+```python
+# BAD — root logger, leaks into all third-party code
+logging.basicConfig(level=logging.DEBUG)
+
+# BAD — print statement masquerading as logging
+print(f"ERROR: {e}")
+
+# BAD — swallowed log with no context
+logger.error("Something went wrong")
+
+# BAD — formatting at call site defeats lazy evaluation
+logger.debug("Items: %s" % str(big_list))  # builds string even when DEBUG is off
+```

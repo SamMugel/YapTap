@@ -1,0 +1,59 @@
+---
+description: Rust unsafe code, security, and avoiding undefined behaviour
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Safety & Unsafe
+
+`unsafe` is a contract with the compiler, not a performance switch. The cost of getting it wrong is undefined behaviour.
+
+## Rules for `unsafe`
+
+- Every `unsafe` block must have a comment explaining the invariant that makes it sound:
+  ```rust
+  // SAFETY: `ptr` is non-null and aligned because it was obtained from
+  // `Box::into_raw` and we hold the only reference.
+  unsafe { ptr.as_ref().unwrap_unchecked() }
+  ```
+- Minimise the scope of `unsafe` blocks — never put more code in `unsafe` than is strictly necessary
+- Never use `unsafe` to silence a borrow checker error — that error means the code has a real bug
+- Encapsulate all `unsafe` in a safe abstraction with a well-defined public API; do not expose raw pointers or raw indices across module boundaries
+- Run `cargo miri` in CI to catch UB that the compiler itself misses (dangling pointers, uninitialized reads, invalid data)
+
+## Common sources of UB to avoid
+
+- Casting `&T` to `&mut T` via pointer casts — this is instant UB if any shared reference exists
+- Creating two mutable references to the same memory — violates the aliasing model
+- Reading uninitialised memory — use `MaybeUninit<T>` if you must construct values before initialising
+- Transmuting between types with different sizes or alignment requirements
+- Calling a function through a function pointer of the wrong type
+
+## `unsafe` traits
+
+- Implementing `Send` or `Sync` manually is an `unsafe impl` — only do this when you have formally verified the type is safe to cross thread boundaries
+- Document every `unsafe impl` with the reasoning
+
+## Input validation & injection
+
+- Never pass user-controlled strings to shell commands — use `std::process::Command` with argument arrays, never `sh -c`
+- Validate all external input at system boundaries (network, files, environment variables) before passing into business logic
+- Never deserialise untrusted `bincode`/`postcard`/raw bytes directly into types that contain pointers or `unsafe` invariants
+
+## Secrets & credentials
+
+- Never hardcode secrets, API keys, or tokens in source — load from environment variables or a secrets manager
+- Zero sensitive memory before dropping: use the `zeroize` crate (`Zeroize` + `ZeroizeOnDrop`) for key material
+- Use `secrecy::Secret<T>` to prevent accidental `Debug` printing of sensitive values
+
+## Cryptography
+
+- Never implement cryptographic primitives — use `ring`, `rustls`, or `RustCrypto` crates
+- Use `ring::rand::SystemRandom` / `getrandom` for cryptographically secure random numbers — not `rand::thread_rng()` for security-sensitive purposes
+- Hash passwords with `argon2` (crate) — never SHA-1, MD5, or plain SHA-256 for passwords
+
+## Dependency hygiene
+
+- Audit dependencies with `cargo audit` in CI — subscribe to `RustSec` advisories
+- Pin dependencies with `Cargo.lock` (always commit it for binaries; do not commit for libraries)
+- Minimise `unsafe` in dependencies — use `cargo geiger` to surface unsafe counts in the dependency tree

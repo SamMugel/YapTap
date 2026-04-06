@@ -1,7 +1,7 @@
 ---
 description: Rules for preserving and writing AI intent comments (INTENT, AI NOTE, AI CONTRACT)
 globs: **/*.py
-alwaysApply: false
+alwaysApply: true
 ---
 
 # AI Intent Comments (CRITICAL)

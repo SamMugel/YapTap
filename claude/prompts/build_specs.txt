@@ -1,0 +1,29 @@
+We are going to create an AI writing assistant. The AI writing assistant is called "YapTap".
+
+workflow:
+1. user selects a pre-defined prompt (the prompt) from a library
+2. user hits a hotkey
+3. app records from microphone
+4. user hits hotkey again
+5. recording stops
+6. app transcribes using whisper
+7. app inputs the prompt + transcription into ollama
+8. app pastes output where the user has their cursor
+
+You are allowed to call whisper and ollama via Python as a subprocess. Everything OS-critical needs to be Rust.
+
+The first operation is
+
+"$ yaptap"
+
+When yaptap is invoked it starts recording. hit enter to stop recording, and ouput whisper transcript in the terminal.
+
+IMPORTANT: Write up the specifications into the "specs/" folder with each domain topic (including technical topic) as a seperate markdown file. Create a "SPECS.md" in the root of the directory which is an overview document that contains a table that links to all the specs.
+
+roadmap:
+1. access whisper via CLI. Echo transcript to terminal.
+2. when calling from CLI, specify prompt. input transcript and prompt into ollama, and echo output in terminal.
+3. start transcription with hotkey. Select config from menu. Access transcript history.
+4. print output where the user has their cursor
+
+IMPORTANT: ONLY BUILD DETAILED SPECS PHASE 1 OF ROADMAP. record other phases (high level) to specs/roadmap.md

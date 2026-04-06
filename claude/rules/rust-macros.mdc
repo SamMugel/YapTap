@@ -1,0 +1,111 @@
+---
+description: Rust macro_rules! hygiene, procedural macros, and derive macro best practices
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Macros
+
+Macros are powerful but sharp. Prefer functions, traits, and generics; reach for macros only when they are the only way to eliminate real repetition.
+
+## When to use macros
+
+| Situation | Approach |
+|---|---|
+| Repetitive boilerplate with variable arity | `macro_rules!` |
+| Custom `#[derive]` for a trait | Proc-macro (derive) |
+| Domain-specific syntax or DSL | Proc-macro (function-like) |
+| Adding behaviour to items by annotation | Proc-macro (attribute) |
+| Anything achievable with generics or traits | Use generics/traits instead |
+
+## `macro_rules!` hygiene
+
+- Always use `$crate::` to refer to items from the defining crate inside a macro body — never bare paths:
+  ```rust
+  // BAD — breaks if the user has not imported the crate
+  macro_rules! my_macro {
+      () => { MyStruct::new() };
+  }
+  // GOOD
+  macro_rules! my_macro {
+      () => { $crate::MyStruct::new() };
+  }
+  ```
+- Use `tt` (token tree) fragments for maximum flexibility; use typed fragments (`expr`, `ty`, `ident`, `path`, `block`, `stmt`) to get better error messages when input is wrong
+- Wrap macro bodies in `{ }` or `( )` to avoid precedence surprises at the call site
+- Never emit `use` statements from inside a macro — they pollute the caller's namespace
+- Export macros intended for external use with `#[macro_export]`; keep internal helpers unexported
+
+## Declarative macro patterns
+
+```rust
+// Correct repetition pattern
+macro_rules! impl_from_str {
+    ($($t:ty),+) => {
+        $(
+            impl FromStr for $t {
+                type Err = ParseError;
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    s.parse().map(Self).map_err(Into::into)
+                }
+            }
+        )+
+    };
+}
+
+impl_from_str!(Foo, Bar, Baz);
+```
+
+- Test macros with `macro_rules! ... #[cfg(test)]` expansion tests and `trybuild` for compile-error cases
+- Use `assert_matches!` (std) or the `matches!` macro rather than rolling your own pattern-matching assertion
+
+## Procedural macros
+
+Proc-macros live in a dedicated `*-derive` or `*-macros` crate — they cannot be in the same crate they affect.
+
+- Use `syn` for parsing Rust token streams; use `quote` for generating code — do not hand-roll token manipulation
+- Return a `proc_macro2::TokenStream` from your implementation function, then wrap it in `proc_macro::TokenStream` in the entry point:
+  ```rust
+  #[proc_macro_derive(MyTrait, attributes(my_attr))]
+  pub fn my_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+      let input = syn::parse_macro_input!(input as syn::DeriveInput);
+      impl_my_trait(input)
+          .unwrap_or_else(syn::Error::into_compile_error)
+          .into()
+  }
+  ```
+- Use `syn::Error::new_spanned(...).into_compile_error()` to emit errors — never `panic!` inside a proc-macro, as it produces a terrible user experience
+- Use `darling` to parse macro helper attributes declaratively instead of manual `syn` attribute parsing
+
+## `#[derive(...)]` ordering convention
+
+Consistently order derives: **Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default**, then external crates (`Serialize`, `Deserialize`, `Error`, etc.):
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct Foo { ... }
+```
+
+## Trait coherence & orphan rules
+
+- The orphan rule: you can only implement a trait for a type if you own **either** the trait **or** the type
+- Use the newtype pattern to implement foreign traits on foreign types:
+  ```rust
+  // Cannot: impl Display for Vec<MyType> — Vec and Display are both foreign
+  struct MyVec(Vec<MyType>);
+  impl Display for MyVec { ... } // OK — you own MyVec
+  ```
+- Use sealed traits (see `rust-modules.mdc`) to prevent downstream `impl` of your trait on arbitrary types
+- Blanket implementations (`impl<T: Foo> Bar for T`) affect ALL types — add them with care; they are a semver-breaking change to remove
+
+## Testing macros
+
+- Use `trybuild` to assert that macros produce specific compile errors:
+  ```rust
+  #[test]
+  fn derive_missing_field_errors() {
+      let t = trybuild::TestCases::new();
+      t.compile_fail("tests/ui/missing_field.rs");
+  }
+  ```
+- Use `macro_rules!` expansion tests with `assert_eq!(format!("{:?}", result), expected)` for output validation

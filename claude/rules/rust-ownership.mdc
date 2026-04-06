@@ -1,0 +1,50 @@
+---
+description: Rust ownership, borrowing, and lifetime best practices
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Ownership & Borrowing
+
+The borrow checker is your ally. If you are fighting it, the design is wrong — not the compiler.
+
+## Core rules
+
+- Prefer borrowing (`&T`, `&mut T`) over owning (`T`) in function parameters unless the function needs to consume or store the value
+- Accept `&str` instead of `&String`, `&[T]` instead of `&Vec<T>`, `&Path` instead of `&PathBuf` — these are strictly more general
+- Never clone to satisfy the borrow checker without first asking: "can I restructure to avoid this?"
+- Never use `Rc<RefCell<T>>` as a reflex — reach for it only after confirming a tree/graph ownership structure genuinely requires shared mutability
+
+## Lifetimes
+
+- Let the compiler elide lifetimes wherever possible — do not annotate what the elision rules already cover
+- When lifetime annotations are required, name them meaningfully when there are multiple (`'input`, `'buf`) not just `'a`, `'b`
+- Avoid `'static` bounds on trait objects unless the value truly must live forever (e.g. spawned threads); prefer bounded lifetimes
+- `'static` string literals are fine; `Box<dyn Trait + 'static>` in an API is a design smell unless you are crossing thread boundaries
+
+## Cloning & copying
+
+- Derive `Copy` for small, trivially-copyable types (plain structs of primitives)
+- Derive `Clone` for types that are cheap to duplicate logically but not bitwise
+- When passing large structs, pass references — not clones
+- `Arc::clone(&x)` is explicit and preferred over `x.clone()` for shared ownership to make it visible at the call site
+
+## Interior mutability
+
+- Use `Cell<T>` for `Copy` types; `RefCell<T>` for non-`Copy` types with single-threaded interior mutability
+- Use `Mutex<T>` / `RwLock<T>` for multi-threaded interior mutability
+- Document every `RefCell` / `Mutex` with a comment explaining the invariant that prevents panics/deadlocks
+
+## Common anti-patterns
+
+```rust
+// BAD — unnecessary clone
+fn print_name(name: &String) { println!("{name}"); }
+// GOOD
+fn print_name(name: &str) { println!("{name}"); }
+
+// BAD — clone to dodge the borrow checker
+let x = some_map.get(&key).unwrap().clone();
+drop(some_map); // unlock conceptually
+// GOOD — restructure the borrow scope or use entry API
+```

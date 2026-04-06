@@ -1,0 +1,42 @@
+---
+description: Rust style, formatting, and naming conventions (rustfmt, clippy, idioms)
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Style & Formatting
+
+Let `rustfmt` and `clippy` do the arguing. Treat their output as ground truth.
+
+## Tooling
+
+- Run `rustfmt` on every file before committing — do not fight its decisions
+- Run `clippy` with `cargo clippy -- -D warnings`; every warning is a bug
+- CI must fail on both `rustfmt --check` and `clippy` warnings
+- Use `cargo fix` to apply clippy suggestions automatically when safe
+
+## Naming
+
+| Item | Convention |
+|---|---|
+| Variables, functions, methods, modules, crates | `snake_case` |
+| Types, traits, enums, structs | `PascalCase` |
+| Constants, statics | `SCREAMING_SNAKE_CASE` |
+| Type parameters | Short `PascalCase` (`T`, `K`, `V`, `E`, `Err`) |
+| Lifetimes | Short lowercase `'a`, `'b`; use `'static` only when truly static |
+| Macro names | `snake_case!` |
+
+## Layout
+
+- Maximum line length: **100 characters** (rustfmt default)
+- One blank line between top-level items
+- `use` declarations at the top, grouped: `std` → external crates → crate-local (`crate::`, `super::`, `self::`)
+- Avoid deeply nested blocks — extract named functions instead
+
+## Idioms
+
+- Prefer `if let` / `while let` over `match` when only one arm matters
+- Use `?` for error propagation — never `.unwrap()` in library code
+- Prefer method chaining on iterators over imperative loops
+- Avoid `return` at the end of a function — use tail expressions
+- Use `_` prefix for intentionally unused variables; never suppress the warning with `#[allow(unused)]` in production code

@@ -1,0 +1,101 @@
+---
+description: Rust iterator patterns, adapters, and functional style best practices
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Iterators
+
+Iterators are Rust's composable, zero-cost loop abstraction. Use them instead of manual index loops.
+
+## Core principle
+
+An iterator chain is not slower than a `for` loop — the compiler fuses adapters into a single pass. Prefer chains for readability and to give LLVM more optimisation surface.
+
+## Choosing the right adapter
+
+| Goal | Adapter |
+|---|---|
+| Transform each element | `.map(f)` |
+| Keep matching elements | `.filter(pred)` |
+| Transform + flatten | `.flat_map(f)` |
+| Accumulate to one value | `.fold(init, f)` or `.reduce(f)` |
+| Short-circuit search | `.find(pred)`, `.any(pred)`, `.all(pred)` |
+| Collect into `Vec` | `.collect::<Vec<_>>()` |
+| Collect into `HashMap` | `.collect::<HashMap<_, _>>()` |
+| Count elements | `.count()` |
+| Sum / product | `.sum::<T>()`, `.product::<T>()` |
+| Pair with index | `.enumerate()` |
+| Pair two iterators | `.zip(other)` |
+| Skip / take | `.skip(n)`, `.take(n)`, `.skip_while(pred)`, `.take_while(pred)` |
+| Flatten nested | `.flatten()` |
+| Deduplicate consecutive | `.dedup()` (on sorted `Vec`) |
+
+## Rules
+
+- Prefer `iter()` (borrowing) over `into_iter()` (consuming) when you only read items
+- Prefer `.iter().map(...).collect()` over a `for` loop that pushes into a `Vec`
+- Use `.cloned()` / `.copied()` to convert `Iterator<Item = &T>` to `Iterator<Item = T>` cleanly
+- Chain `.filter_map(f)` instead of `.filter(pred).map(f)` when both steps are needed
+- Use `.peekable()` only when you genuinely need look-ahead — it adds a layer of wrapping
+- Avoid calling `.collect()` and then immediately iterating again — stay lazy as long as possible
+
+## Implementing `Iterator`
+
+When implementing a custom iterator, implement `Iterator` and let the standard library blanket provide all adapters for free:
+
+```rust
+struct Counter { count: u32, max: u32 }
+
+impl Iterator for Counter {
+    type Item = u32;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count < self.max {
+            self.count += 1;
+            Some(self.count)
+        } else {
+            None
+        }
+    }
+}
+```
+
+- Also implement `size_hint` when the length is known — it lets `collect` pre-allocate
+- Implement `ExactSizeIterator` when you know the exact remaining count
+- Implement `DoubleEndedIterator` when bidirectional traversal makes sense
+
+## Common patterns
+
+```rust
+// Partition into two Vecs
+let (evens, odds): (Vec<_>, Vec<_>) = numbers.iter().partition(|&&x| x % 2 == 0);
+
+// Flatten Option results
+let values: Vec<u32> = strings.iter()
+    .filter_map(|s| s.parse::<u32>().ok())
+    .collect();
+
+// Build a HashMap from an iterator
+let map: HashMap<&str, usize> = words.iter()
+    .enumerate()
+    .map(|(i, w)| (*w, i))
+    .collect();
+
+// Chain two iterators without allocating
+let all = first.iter().chain(second.iter());
+```
+
+## Anti-patterns
+
+```rust
+// BAD — collect just to iterate again
+let v: Vec<_> = iter.map(f).collect();
+for x in v { ... }
+// GOOD — stay lazy
+for x in iter.map(f) { ... }
+
+// BAD — index loop on a Vec when iterating in order
+for i in 0..v.len() { process(v[i]); }
+// GOOD
+for item in &v { process(item); }
+```

@@ -1,0 +1,84 @@
+---
+description: Rust testing patterns, unit tests, integration tests, and property testing
+globs: **/*.rs
+alwaysApply: false
+---
+
+# Rust Testing
+
+Tests live next to the code. Make them fast, deterministic, and informative.
+
+## Structure
+
+- **Unit tests**: in a `#[cfg(test)] mod tests { ... }` block at the bottom of the module they test
+- **Integration tests**: in `tests/` at the crate root — one file per logical area
+- **Doc tests**: in `///` doc comments for public API examples — they must compile and pass
+- **Benchmarks**: in `benches/` using `criterion`
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_valid_input_returns_value() {
+        let result = parse("42");
+        assert_eq!(result, Ok(42));
+    }
+
+    #[test]
+    fn parse_empty_string_returns_error() {
+        assert!(parse("").is_err());
+    }
+}
+```
+
+## Naming
+
+- Name tests after the behaviour they verify, not the function they call: `creates_user_with_hashed_password`, not `test_create_user`
+- One assertion of behaviour per test where possible; multiple `assert!` calls that check the same outcome are fine
+
+## Assertions
+
+- Use `assert_eq!(actual, expected)` — not `assert!(actual == expected)` — for better failure messages
+- Use `assert!(result.is_err())` / `assert!(result.is_ok())` for `Result` checks; unwrap in tests only after confirming `is_ok()`
+- Use `#[should_panic(expected = "some message")]` to assert panics, and include the expected message
+
+## Test helpers & fixtures
+
+- Prefer plain functions over macros for test helpers — they give better stack traces
+- Build test fixtures with the builder pattern or simple helper functions in the `tests` module; do not repeat setup code
+- Use `tempfile::tempdir()` for tests that need a real filesystem — never hardcode paths
+
+## Mocking
+
+- Prefer dependency injection with traits over global mocks — inject a `impl MyTrait` and provide a fake implementation in tests
+- Use `mockall` when you need auto-generated mocks; document why a mock was chosen over a fake
+- Avoid mocking the database or network in integration tests — use real dependencies or `wiremock`/`sqlx` test transactions
+
+## Property testing
+
+- Use `proptest` or `quickcheck` for functions where exhaustive testing is impractical:
+  ```rust
+  proptest! {
+      #[test]
+      fn roundtrip_serialize(value: MyType) {
+          let serialized = serialize(&value);
+          let deserialized: MyType = deserialize(&serialized).unwrap();
+          prop_assert_eq!(value, deserialized);
+      }
+  }
+  ```
+
+## Async tests
+
+- Use `#[tokio::test]` for async unit tests
+- Always set a timeout in async tests to prevent silent hangs:
+  ```rust
+  #[tokio::test]
+  async fn test_with_timeout() {
+      tokio::time::timeout(Duration::from_secs(5), my_async_fn())
+          .await
+          .expect("test timed out");
+  }
+  ```
