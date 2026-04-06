@@ -11,7 +11,7 @@ Detailed specs: [cli.md](cli.md), [audio-recording.md](audio-recording.md), [tra
 - Starts microphone capture on launch.
 - Pressing Enter stops capture and flushes the audio buffer to a temp WAV file.
 - Invokes a Python helper (`transcribe.py`) as a subprocess, passing the WAV path.
-- `transcribe.py` calls the Whisper CLI and returns the transcript on stdout.
+- `transcribe.py` calls the Whisper Python library and returns the transcript on stdout.
 - `yaptap` prints the transcript to the terminal and exits 0.
 
 ### Out of scope for phase 1

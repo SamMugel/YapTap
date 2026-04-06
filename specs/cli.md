@@ -38,7 +38,8 @@ She sells seashells by the seashore.
 | Condition | Behaviour |
 |---|---|
 | No microphone found | Print `error: no input device found` to stderr, exit 1 |
-| Whisper not installed / Python not found | Print `error: transcription failed — <subprocess stderr>` to stderr, exit 1 |
+| `python3` not on PATH | Print `error: python3 not found` to stderr, exit 1 |
+| Whisper not installed / transcription fails | Print `error: transcription failed — <subprocess stderr>` to stderr, exit 1 |
 | Recording produces empty audio (silence) | Still run transcription; Whisper returns an empty string or short filler; print as-is |
 | User sends SIGINT (Ctrl-C) | Stop recording, delete temp file, print nothing, exit 130 |
 
