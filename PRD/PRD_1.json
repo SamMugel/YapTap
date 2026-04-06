@@ -19,246 +19,295 @@
   "tasks": [
     {
       "id": "P1-T001",
+      "section": "foundation",
       "title": "Create Cargo manifest for the `yaptap` binary",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T002",
+      "section": "foundation",
       "title": "Add phase 1 Rust dependencies: cpal, hound, tempfile, anyhow, ctrlc, tracing, tracing-subscriber",
       "implementation_status": "to do"
     },
     {
-      "id": "P1-T003",
-      "title": "Create `src/main.rs` with a `main()` entrypoint that returns `anyhow::Result<()>`",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T004",
-      "title": "Initialize tracing subscriber in `main` with `RUST_LOG` support",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T005",
-      "title": "Start microphone capture immediately when `yaptap` launches",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T006",
-      "title": "Print `Recording... (press Enter to stop)` when capture starts",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T007",
-      "title": "Implement an in-place elapsed-time counter line using carriage return updates",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T008",
-      "title": "Resolve default input device via `cpal::default_host().default_input_device()`",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T009",
-      "title": "Print `error: no input device found` to stderr and exit code 1 when no microphone is available",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T010",
-      "title": "Negotiate an input stream config targeting 16 kHz mono i16 (or closest supported)",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T011",
-      "title": "Capture PCM samples in a shared in-memory `Vec<i16>` from the CPAL callback",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T012",
-      "title": "Create a dedicated stdin thread that blocks on `read_line()` for Enter detection",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T013",
-      "title": "Send an mpsc stop signal from the stdin thread when Enter is pressed",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T014",
-      "title": "Stop and close the input stream when the Enter stop signal is received",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T015",
-      "title": "Create a temp WAV path named `yaptap_<timestamp>.wav` using `tempfile::Builder`",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T016",
-      "title": "Encode captured samples into WAV using `hound::WavWriter` with negotiated format",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T017",
-      "title": "Finalize and flush WAV output before launching the Python transcription subprocess",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T018",
-      "title": "Register a SIGINT handler that deletes temp WAV files and exits with code 130",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T019",
-      "title": "Delete temp WAV files after successful transcription output",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T020",
-      "title": "Delete temp WAV files on runtime failures before process exit",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T021",
-      "title": "Validate `python3` is available on PATH before launching transcription",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T022",
-      "title": "Print `error: python3 not found` to stderr and exit code 1 when `python3` is unavailable",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T046",
-      "title": "Validate `ffmpeg` is available on PATH before launching the transcription subprocess",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T047",
-      "title": "Print `error: ffmpeg not found` to stderr and exit code 1 when `ffmpeg` is unavailable",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T023",
-      "title": "Print `Transcribing...` after recording stops and before running the subprocess",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T024",
-      "title": "Spawn `python3 src/core/transcribe.py <wav_path>` and capture stdout/stderr",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T025",
-      "title": "Print `error: transcription failed — <subprocess stderr>` to stderr and exit code 1 on non-zero subprocess exit",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T026",
-      "title": "Print transcript stdout from subprocess as newline-terminated CLI output",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P1-T027",
-      "title": "Exit with code 0 when recording, transcription, and output complete successfully",
-      "implementation_status": "to do"
-    },
-    {
       "id": "P1-T048",
+      "section": "foundation",
       "title": "Create `src/__init__.py` as an empty file to make `src` a Python package",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T049",
+      "section": "foundation",
       "title": "Create `src/core/__init__.py` as an empty file to make `src.core` a Python package",
       "implementation_status": "to do"
     },
     {
+      "id": "P1-T003",
+      "section": "foundation",
+      "title": "Create `src/main.rs` with a `main()` entrypoint that returns `anyhow::Result<()>`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T004",
+      "section": "foundation",
+      "title": "Initialize tracing subscriber in `main` with `RUST_LOG` support",
+      "implementation_status": "to do"
+    },
+    {
       "id": "P1-T028",
+      "section": "architectural-scaffolding",
       "title": "Scaffold `src/core/transcribe.py` with module-level docstring, imports (`argparse`, `logging`, `sys`, `pathlib`, `whisper`), and empty function stubs for `transcribe(wav_path)` and `main()`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T029",
+      "section": "architectural-scaffolding",
       "title": "Add AI intent comment block for `transcribe()` purpose and invariants",
       "implementation_status": "to do"
     },
     {
+      "id": "P1-T008",
+      "section": "device-resolution",
+      "title": "Resolve default input device via `cpal::default_host().default_input_device()`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T009",
+      "section": "device-resolution",
+      "title": "Print `error: no input device found` to stderr and exit code 1 when no microphone is available",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T010",
+      "section": "device-resolution",
+      "title": "Negotiate an input stream config targeting 16 kHz mono i16 (or closest supported)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T018",
+      "section": "signal-handling",
+      "title": "Register a SIGINT handler that deletes temp WAV files and exits with code 130",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T011",
+      "section": "capture-pipeline",
+      "title": "Capture PCM samples in a shared in-memory `Vec<i16>` from the CPAL callback",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T005",
+      "section": "capture-pipeline",
+      "title": "Start microphone capture immediately when `yaptap` launches",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T006",
+      "section": "capture-pipeline",
+      "title": "Print `Recording... (press Enter to stop)` when capture starts",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T007",
+      "section": "capture-pipeline",
+      "title": "Implement an in-place elapsed-time counter line using carriage return updates",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T012",
+      "section": "stop-flow",
+      "title": "Create a dedicated stdin thread that blocks on `read_line()` for Enter detection",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T013",
+      "section": "stop-flow",
+      "title": "Send an mpsc stop signal from the stdin thread when Enter is pressed",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T014",
+      "section": "stop-flow",
+      "title": "Stop and close the input stream when the Enter stop signal is received",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T015",
+      "section": "wav-encoding",
+      "title": "Create a temp WAV path named `yaptap_<timestamp>.wav` using `tempfile::Builder`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T016",
+      "section": "wav-encoding",
+      "title": "Encode captured samples into WAV using `hound::WavWriter` with negotiated format",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T017",
+      "section": "wav-encoding",
+      "title": "Finalize and flush WAV output before launching the Python transcription subprocess",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T019",
+      "section": "wav-encoding",
+      "title": "Delete temp WAV files after successful transcription output",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T020",
+      "section": "wav-encoding",
+      "title": "Delete temp WAV files on runtime failures before process exit",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T021",
+      "section": "prerequisite-validation",
+      "title": "Validate `python3` is available on PATH before launching transcription",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T022",
+      "section": "prerequisite-validation",
+      "title": "Print `error: python3 not found` to stderr and exit code 1 when `python3` is unavailable",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T046",
+      "section": "prerequisite-validation",
+      "title": "Validate `ffmpeg` is available on PATH before launching the transcription subprocess",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T047",
+      "section": "prerequisite-validation",
+      "title": "Print `error: ffmpeg not found` to stderr and exit code 1 when `ffmpeg` is unavailable",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T023",
+      "section": "transcription-flow",
+      "title": "Print `Transcribing...` after recording stops and before running the subprocess",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T024",
+      "section": "transcription-flow",
+      "title": "Spawn `python3 src/core/transcribe.py <wav_path>` and capture stdout/stderr",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T025",
+      "section": "transcription-flow",
+      "title": "Print `error: transcription failed — <subprocess stderr>` to stderr and exit code 1 on non-zero subprocess exit",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T026",
+      "section": "transcription-flow",
+      "title": "Print transcript stdout from subprocess as newline-terminated CLI output",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P1-T027",
+      "section": "transcription-flow",
+      "title": "Exit with code 0 when recording, transcription, and output complete successfully",
+      "implementation_status": "to do"
+    },
+    {
       "id": "P1-T030",
+      "section": "python-implementation",
       "title": "Validate `wav_path` is non-empty in `transcribe()` and raise `ValueError` otherwise",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T031",
+      "section": "python-implementation",
       "title": "Validate WAV file existence in `transcribe()` and raise `ValueError` when missing",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T032",
+      "section": "python-implementation",
       "title": "Load Whisper model in `transcribe()` and wrap load failures as `RuntimeError`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T033",
+      "section": "python-implementation",
       "title": "Run `model.transcribe()` and return stripped transcript text (allow empty string)",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T034",
+      "section": "python-implementation",
       "title": "Parse `wav_path` as a positional argument in Python CLI `main()`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T035",
+      "section": "python-implementation",
       "title": "Print `error: <message>` to stderr and exit code 1 for Python transcription failures",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T036",
+      "section": "python-implementation",
       "title": "Print transcript to stdout in Python CLI on success",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T037",
+      "section": "tests",
       "title": "Create `src/core/transcribe_test.py` using Python `unittest`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T038",
+      "section": "tests",
       "title": "Mock `whisper.load_model` and model transcription calls in unit tests",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T039",
+      "section": "tests",
       "title": "Add test: valid WAV returns transcript text",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T040",
+      "section": "tests",
       "title": "Add test: empty `wav_path` raises `ValueError`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T041",
+      "section": "tests",
       "title": "Add test: missing WAV file raises `ValueError`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T042",
+      "section": "tests",
       "title": "Add test: Whisper model load failure raises `RuntimeError`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T043",
+      "section": "tests",
       "title": "Add test: Whisper transcription failure raises `RuntimeError`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T044",
+      "section": "tests",
       "title": "Document phase 1 transcription test command: `python -m unittest src.core.transcribe_test`",
       "implementation_status": "to do"
     },
     {
       "id": "P1-T045",
+      "section": "verification",
       "title": "Verify `cargo install --path .` produces an installable `yaptap` binary",
       "implementation_status": "to do"
     }
