@@ -6,6 +6,8 @@ YapTap is an AI writing assistant that records the user's voice, transcribes it,
 
 This file and the spec documents it links to are the authoritative feature reference. No feature may be coded unless it is described here or in a linked spec.
 
+Implementation tasks are tracked in `PRD/`, one file per phase.
+
 ## Spec Documents
 
 | Document | Description |
