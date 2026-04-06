@@ -174,7 +174,7 @@
     },
     {
       "id": "P1-T028",
-      "title": "Scaffold `src/core/transcribe.py` with module-level docstring, imports (`argparse`, `logging`, `sys`, `pathlib`, `whisper`), and empty function stubs for `transcribe()` and `main()`",
+      "title": "Scaffold `src/core/transcribe.py` with module-level docstring, imports (`argparse`, `logging`, `sys`, `pathlib`, `whisper`), and empty function stubs for `transcribe(wav_path)` and `main()`",
       "implementation_status": "to do"
     },
     {
@@ -204,7 +204,7 @@
     },
     {
       "id": "P1-T034",
-      "title": "Parse `wav_path` and optional `--model` argument (default `base`) in Python CLI",
+      "title": "Parse `wav_path` as a positional argument in Python CLI `main()`",
       "implementation_status": "to do"
     },
     {
