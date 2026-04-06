@@ -6,7 +6,21 @@ alwaysApply: true
 
 # Auto Git Commit After Changes
 
-After completing any file change, automatically stage and commit the changed files.
+## CRITICAL — this is non-negotiable
+
+Committing after every file change is **not optional**. It is the last step of every task, without exception.
+
+**Do not wait for the user to ask. Do not batch commits across tasks. Do not finish a response without committing if files were changed.**
+
+If you wrote or modified files and did not commit them, you have not finished the task.
+
+---
+
+## When to commit
+
+- Immediately after completing any set of file writes or edits
+- One commit per logical task — if a task touches multiple files, stage and commit them together
+- Before responding to the next user message
 
 ## Commit title
 
@@ -23,9 +37,9 @@ Common types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `style`, `ci`
 - Explain **what** was changed (which files and what was modified in them)
 - Explain **why** by referencing the user's prompt(s) that drove the change — summarise the intent behind the request, not just the literal words
 
-## Rules
+## Hard rules
 
-- Stage only the files that were changed in this task — do not use `git add -A` or `git add .`
+- Stage only the files changed in this task — never `git add -A` or `git add .`
 - Always write the commit message via a heredoc to preserve formatting
-- Do not skip hooks (`--no-verify`)
-- Do not amend existing commits — always create a new commit
+- Never skip hooks (`--no-verify`)
+- Never amend existing commits — always create a new commit
