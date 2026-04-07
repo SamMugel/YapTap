@@ -1,0 +1,247 @@
+{
+  "phase": 2,
+  "phase_name": "Prompt + LLM Output",
+  "goal": "`$ yaptap --prompt <name>` records, transcribes, then pipes the transcript through an ollama LLM with a user-selected prompt, streaming the result to stdout.",
+  "scope": {
+    "in_scope": [
+      "CLI flags: --prompt, --prompt-file, --model, --llm-model, --list-prompts",
+      "Prompt TOML file format and validation",
+      "Bundled default prompts in config/prompts/ (TOML format)",
+      "yaptap --list-prompts: list available prompts from config/prompts/",
+      "Python llm.py subprocess: stdin transcript + prompt file → streamed ollama response",
+      "Rust: spawn llm.py with transcript on stdin, stream stdout to terminal",
+      "Unit tests for llm.py",
+      "Phase 2 error handling and exit codes"
+    ],
+    "out_of_scope": [
+      "Global hotkeys",
+      "Background daemon",
+      "Cursor injection",
+      "Prompt selection UI / TUI"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "P2-T001",
+      "section": "rust-flags",
+      "title": "Add clap (or manual arg parsing) to parse --prompt, --prompt-file, --model, --llm-model, --list-prompts flags in main.rs",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T002",
+      "section": "rust-flags",
+      "title": "Emit error: --prompt and --prompt-file are mutually exclusive to stderr and exit 1 when both are given",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T003",
+      "section": "rust-deps",
+      "title": "Add `toml` crate to Cargo.toml for prompt file parsing in Rust",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T005",
+      "section": "prompt-list",
+      "title": "Implement --list-prompts: read config/prompts/*.toml, parse name and description fields, print sorted table, exit 0",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T006",
+      "section": "prompt-list",
+      "title": "Print error: prompts directory not found: config/prompts/ to stderr and exit 1 when config/prompts/ is absent",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T007",
+      "section": "prompt-resolution",
+      "title": "Implement --prompt <name> resolution: look up config/prompts/<name>.toml, emit error: prompt '<name>' not found in config/prompts/ on miss, exit 1",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T010",
+      "section": "prompt-resolution",
+      "title": "Implement --prompt-file <path> resolution: validate file exists, emit error: prompt file not found: <path> on miss, exit 1",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T011",
+      "section": "prompt-resolution",
+      "title": "Validate prompt TOML in Rust: check name, description, system fields present; emit error: prompt file invalid — missing field '<field>': <path> on failure, exit 1",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T012",
+      "section": "rust-llm-pipeline",
+      "title": "After successful transcription, when a prompt is selected, print Thinking... to stdout",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T013",
+      "section": "rust-llm-pipeline",
+      "title": "Spawn python3 src/core/llm.py --prompt-file <path> [--model <name>] with transcript piped to subprocess stdin",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T014",
+      "section": "rust-llm-pipeline",
+      "title": "Stream subprocess stdout to terminal in real time (read and print line by line as tokens arrive)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T015",
+      "section": "rust-llm-pipeline",
+      "title": "On non-zero llm.py exit, print error: LLM generation failed — <subprocess stderr> to stderr and exit 1",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T016",
+      "section": "rust-llm-pipeline",
+      "title": "Without --prompt or --prompt-file, preserve phase 1 behaviour: print raw transcript to stdout and exit 0",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T017",
+      "section": "python-scaffolding",
+      "title": "Create src/core/llm.py with module-level docstring, imports (argparse, logging, sys, pathlib, tomllib, ollama), and empty stubs for stream_response() and main()",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T018",
+      "section": "python-scaffolding",
+      "title": "Add AI intent comment block for stream_response() purpose and invariants",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T019",
+      "section": "python-implementation",
+      "title": "Validate prompt_path is non-empty in stream_response() and raise ValueError otherwise",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T020",
+      "section": "python-implementation",
+      "title": "Validate prompt file exists in stream_response() and raise ValueError when missing",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T021",
+      "section": "python-implementation",
+      "title": "Parse prompt TOML in stream_response() using tomllib; raise ValueError on parse error or missing 'system' field",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T022",
+      "section": "python-implementation",
+      "title": "Build ollama messages list: system message from prompt['system'], user message from transcript",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T023",
+      "section": "python-implementation",
+      "title": "Call ollama.chat(model, messages, stream=True) and yield each token chunk; wrap failures as RuntimeError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T024",
+      "section": "python-implementation",
+      "title": "Implement main(): read transcript from stdin, parse --prompt-file and --model args, iterate stream_response(), print each chunk with flush=True, print final newline",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T025",
+      "section": "python-implementation",
+      "title": "Print error: <message> to stderr and exit 1 for ValueError and RuntimeError in main()",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T026",
+      "section": "tests",
+      "title": "Create src/core/llm_test.py using Python unittest",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T027",
+      "section": "tests",
+      "title": "Mock ollama.chat in all llm_test.py tests",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T028",
+      "section": "tests",
+      "title": "Add test: valid transcript + prompt file yields non-empty token chunks",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T029",
+      "section": "tests",
+      "title": "Add test: empty prompt_path raises ValueError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T030",
+      "section": "tests",
+      "title": "Add test: missing prompt file raises ValueError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T031",
+      "section": "tests",
+      "title": "Add test: invalid TOML in prompt file raises ValueError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T032",
+      "section": "tests",
+      "title": "Add test: missing 'system' field in prompt TOML raises ValueError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T033",
+      "section": "tests",
+      "title": "Add test: ollama.chat failure raises RuntimeError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T034",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/email-reply.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T035",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/meeting-notes.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T036",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/slack-message.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T037",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/action-items.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T038",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/journal.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T039",
+      "section": "verification",
+      "title": "Verify `cargo install --path .` produces an installable yaptap binary with phase 2 flags",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T040",
+      "section": "verification",
+      "title": "Verify end-to-end: yaptap --prompt email-reply records, transcribes, and streams LLM output",
+      "implementation_status": "to do"
+    }
+  ]
+}

@@ -12,8 +12,10 @@ Implementation tasks are tracked in `PRD/`, one file per phase.
 
 | Document | Description |
 |---|---|
-| [specs/roadmap.md](specs/roadmap.md) | Phased delivery plan (phase 1 detailed, phases 2–4 high-level) |
+| [specs/roadmap.md](specs/roadmap.md) | Phased delivery plan (phases 1–2 detailed, phases 3–4 high-level) |
 | [specs/architecture.md](specs/architecture.md) | System architecture, language boundaries, component overview |
-| [specs/cli.md](specs/cli.md) | CLI interface specification for `yaptap` (phase 1) |
+| [specs/cli.md](specs/cli.md) | CLI interface specification for `yaptap` (phases 1 & 2) |
 | [specs/audio-recording.md](specs/audio-recording.md) | Microphone capture: format, device selection, lifecycle |
 | [specs/transcription.md](specs/transcription.md) | Whisper transcription via Python subprocess |
+| [specs/prompts.md](specs/prompts.md) | Prompt file format, bundled defaults, discovery, init command |
+| [specs/llm.md](specs/llm.md) | Ollama LLM integration via Python subprocess (`llm.py`) |

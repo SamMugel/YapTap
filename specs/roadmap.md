@@ -19,11 +19,23 @@ Detailed specs: [cli.md](cli.md), [audio-recording.md](audio-recording.md), [tra
 
 ---
 
-## Phase 2 — Prompt + LLM Output (high-level)
+## Phase 2 — Prompt + LLM Output
 
-- CLI flag `--prompt <name>` or `--prompt-file <path>` selects a pre-defined prompt from `~/.config/yaptap/prompts/`.
-- After transcription, `yaptap` concatenates the prompt and transcript and sends them to ollama via a Python subprocess (`llm.py`).
-- LLM response is streamed and echoed to stdout.
+**Goal:** `$ yaptap --prompt <name>` records, transcribes, then pipes the transcript through an LLM with a user-selected prompt, streaming the result to stdout.
+
+Detailed specs: [prompts.md](prompts.md), [llm.md](llm.md)
+
+### Deliverables
+- CLI flags `--prompt <name>`, `--prompt-file <path>`, `--llm-model <name>`, `--model <name>`, `--list-prompts`.
+- Bundled default prompts in `config/prompts/` (TOML format).
+- `yaptap --list-prompts` prints available prompts from `config/prompts/` and exits.
+- After transcription, Rust spawns `python3 src/core/llm.py --prompt-file <path>` with transcript piped to stdin.
+- `llm.py` calls ollama, streams tokens to stdout; Rust echoes them in real time.
+- Status line `Thinking...` printed between `Transcribing...` and the first LLM token.
+- Without `--prompt` / `--prompt-file`, `yaptap` behaves as in phase 1 (print raw transcript).
+
+### Out of scope for phase 2
+- Global hotkeys, background daemon, cursor injection.
 
 ---
 

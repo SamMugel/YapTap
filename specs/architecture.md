@@ -49,19 +49,60 @@
 
 ---
 
-## Directory Layout (phase 1)
+## Directory Layout (phase 2)
 
 ```
 YapTap/
 ├── Cargo.toml
-├── PRD.md
 ├── src/
-│   ├── main.rs                  # Rust CLI entrypoint, audio capture, subprocess call
+│   ├── main.rs                  # Rust CLI entrypoint, audio capture, subprocess calls
 │   └── core/
 │       ├── transcribe.py        # Whisper wrapper: WAV path → transcript on stdout
-│       └── transcribe_test.py   # co-located unit tests for transcribe.py
+│       ├── transcribe_test.py   # co-located unit tests for transcribe.py
+│       ├── llm.py               # Ollama wrapper: stdin transcript + prompt → streamed response
+│       └── llm_test.py          # co-located unit tests for llm.py
+├── config/
+│   └── prompts/                 # bundled default prompt TOML files (embedded at compile time)
+│       ├── email-reply.toml
+│       ├── meeting-notes.toml
+│       ├── slack-message.toml
+│       ├── action-items.toml
+│       └── journal.toml
+├── PRD/
+│   ├── PRD_1.json
+│   └── PRD_2.json
 ├── specs/               # this directory
 └── SPECS.md
+```
+
+
+---
+
+## Phase 2 Component Diagram
+
+```
+┌─────────────────────────────────────────────┐
+│             yaptap (Rust binary)            │
+│                                             │
+│  parse flags (--prompt / --prompt-file)     │
+│  resolve prompt TOML path                   │
+│         │                                   │
+│         ▼                                   │
+│  [audio capture → WAV → transcribe.py]      │
+│         │ (transcript text)                 │
+│         ▼                                   │
+│  print "Thinking..."                        │
+│         │                                   │
+│         ▼                                   │
+│  spawn subprocess:                          │
+│    python3 src/core/llm.py                  │
+│      --prompt-file <path>                   │
+│      [--model <name>]                       │
+│    stdin ← transcript                       │
+│         │ (streamed stdout)                 │
+│         ▼                                   │
+│  echo tokens to terminal in real time       │
+└─────────────────────────────────────────────┘
 ```
 
 ---
@@ -70,14 +111,23 @@ YapTap/
 
 `yaptap` communicates with Python scripts through a simple stdio contract:
 
-- **stdin:** nothing (the WAV path is passed as a CLI argument)
-- **stdout:** UTF-8 text, newline-terminated transcript (or JSON in later phases)
-- **stderr:** forwarded directly to the terminal for debugging
-- **exit code:** 0 on success, non-zero on any error; `yaptap` propagates the error to the user
+### `transcribe.py`
+- **stdin:** nothing (WAV path is a CLI argument)
+- **stdout:** UTF-8 transcript text, newline-terminated
+- **stderr:** forwarded to terminal for debugging
+- **exit code:** 0 on success, non-zero on error
+
+### `llm.py`
+- **stdin:** transcript text (UTF-8, newline-terminated)
+- **stdout:** LLM response, streamed token by token; final `\n` at end
+- **stderr:** forwarded to terminal for debugging
+- **exit code:** 0 on success, non-zero on error
+
+`yaptap` propagates non-zero exit codes to the user as an error message and exits 1.
 
 ---
 
-## Dependencies (phase 1)
+## Dependencies (phases 1 & 2)
 
 ### Rust
 - [`cpal`](https://crates.io/crates/cpal) — cross-platform audio capture
@@ -90,6 +140,10 @@ YapTap/
 
 Note: user-facing terminal output (the transcript, status lines) uses `println!`/`eprintln!` — that is intentional UI output. `tracing` is for internal observability only.
 
+### Rust (phase 2 additions)
+- [`toml`](https://crates.io/crates/toml) — parse prompt TOML files
+
 ### Python
 - `openai-whisper` — transcription (installed in user environment)
-- Standard library only (`argparse`, `sys`, `pathlib`, `logging`)
+- `ollama` — LLM client (phase 2)
+- Standard library: `argparse`, `sys`, `pathlib`, `logging`, `tomllib` (Python 3.11+)

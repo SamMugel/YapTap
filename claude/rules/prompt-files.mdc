@@ -1,0 +1,29 @@
+---
+description: Pre-defined prompts must be saved as TOML files in config/prompts/
+globs:
+alwaysApply: true
+---
+
+# Prompt File Storage
+
+All pre-defined prompts must be saved as `.toml` files in `config/prompts/`.
+
+## Required format
+
+Each prompt file must contain exactly three fields:
+
+```toml
+name = "Human-Readable Name"
+description = "One-line description of what this prompt does"
+system = """
+Full system prompt text passed to the LLM.
+"""
+```
+
+## Rules
+
+- File must be named using kebab-case matching the prompt name (e.g. `email-reply.toml`)
+- All three fields (`name`, `description`, `system`) are required
+- `system` must use a triple-quoted multiline string (`"""..."""`)
+- Never store prompt content inline in source code — always reference the `.toml` file
+- New bundled prompts must also be listed in `specs/prompts.md` under the Bundled Prompts table
