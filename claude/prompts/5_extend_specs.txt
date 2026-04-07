@@ -1,29 +1,60 @@
-We are going to create an AI writing assistant. The AI writing assistant is called "YapTap".
+1. study SPECS.md and specs/* to learn about the app specifications                             
+2. study claude/rules/*
+You are going to build the specs out for phase 2         
+search for pre-defined prompts in config/prompts/*                                              
+modify specs to specify this
 
-workflow:
-1. user selects a pre-defined prompt (the prompt) from a library
-2. user hits a hotkey
-3. app records from microphone
-4. user hits hotkey again
-5. recording stops
-6. app transcribes using whisper
-7. app inputs the prompt + transcription into ollama
-8. app pastes output where the user has their cursor
+----
 
-You are allowed to call whisper and ollama via Python as a subprocess. Everything OS-critical needs to be Rust.
+Add new rule: always save pre-defined prompts in config/prompts/ as toml files
+use the same format as examples provided
 
-The first operation is
+----
 
-"$ yaptap"
-
-When yaptap is invoked it starts recording. hit enter to stop recording, and ouput whisper transcript in the terminal.
-
-IMPORTANT: Write up the specifications into the "specs/" folder with each domain topic (including technical topic) as a seperate markdown file. Create a "SPECS.md" in the root of the directory which is an overview document that contains a table that links to all the specs.
-
-roadmap:
-1. access whisper via CLI. Echo transcript to terminal.
-2. when calling from CLI, specify prompt. input transcript and prompt into ollama, and echo output in terminal.
-3. start transcription with hotkey. Select config from menu. Access transcript history.
-4. print output where the user has their cursor
-
-IMPORTANT: ONLY BUILD DETAILED SPECS PHASE 1 OF ROADMAP. record other phases (high level) to specs/roadmap.md
+Clarifying questions                                                                                                                                   
+                                                                                                                                                         
+  1. How does Rust find config/prompts/ when not running from the repo root?                                                                             
+                                                                                                                                                         
+  The spec says config/prompts/ is "relative to the project root," which works while developing in the repo. But the roadmap says the binary is          
+  installable via cargo install. Once installed, yaptap runs from wherever the user's terminal is — config/prompts/ won't exist relative to CWD.         
+                                                                                                                                                         
+  Three options:                                            
+  - (a) CWD-relative — only works from the repo root; fine if this is a dev-only tool for now
+  - (b) Binary-relative — Rust resolves config/prompts/ relative to the binary's own path (e.g. std::env::current_exe())                                 
+  - (c) Hardcoded absolute path the user configures — too complex for phase 2                                           
+                                                                                                                                                         
+  Which do you want?                                                                                                                                     
+                                                                                                                             
+  ---                                                                                                                                                    
+  2. What happens on SIGINT (Ctrl-C) during LLM streaming?  
+                                                                                                                                                         
+  The spec covers SIGINT during recording (delete temp file, exit 130). But what if the user presses Ctrl-C while the LLM is generating output? Should
+  it:                                                                                                                                                    
+  - Kill the llm.py subprocess immediately and exit 130?    
+  - Let the current streamed output stand, print a newline, then exit 130?                                                                               
+                                                            
+  ---                                                                                                                                                    
+  Bugs I found (can fix now if you confirm)                 
+                                                                                                                                                         
+  A. Streaming conflict in llm.md                           
+                                                                                                                                                         
+  Python is specified to print tokens with no newlines (print(token, end="", flush=True)), but Rust is specified to read the subprocess "line-by-line."  
+  These are incompatible — Rust would buffer the entire response until the final \n. Rust needs to read byte-by-byte (or by chunk) for real-time
+  streaming. Should I fix this?                                                                                                                          
+                                                            
+  B. Stale "embedded at compile time" comment in architecture.md                                                                                         
+   
+  Line 65 still says # bundled default prompt TOML files (embedded at compile time) — the embedding approach was removed when --init was dropped.        
+                                                            
+  C. Stale "init command" description in SPECS.md                                                                                                        
+                                                            
+  The prompts.md entry says "Prompt file format, bundled defaults, discovery, init command" — --init no longer exists.                                   
+   
+  ---                                                                                                                                                    
+  B and C are clear stale text — I can fix those now. A I can fix once you confirm the right streaming approach. Question 1 is the most consequential and
+   needs your decision before the Phase 2 PRD tasks can be coded correctly. 
+   
+   
+1. Binary-relative
+2. Kill the llm.py subprocess immediately, delete any temp files, and exit 130
+A, B, and C -> Fix these. Get subagents to modify specs, rules, and PRD, whichever necessary.
