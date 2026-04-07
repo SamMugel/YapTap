@@ -22,9 +22,45 @@
   },
   "tasks": [
     {
+      "id": "P2-T034",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/email-reply.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T035",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/meeting-notes.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T036",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/slack-message.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T037",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/action-items.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
+      "id": "P2-T038",
+      "section": "bundled-prompts",
+      "title": "Create config/prompts/journal.toml with name, description, system fields",
+      "implementation_status": "done"
+    },
+    {
       "id": "P2-T001",
       "section": "rust-flags",
       "title": "Define `Args` struct with `clap::Parser` derive covering --prompt, --prompt-file, --model, --llm-model, --list-prompts fields; parse at start of `main()`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T004",
+      "section": "prompt-resolution",
+      "title": "Implement binary-relative prompts directory resolution: use std::env::current_exe() to get binary path, resolve config/prompts/ as a sibling directory",
       "implementation_status": "to do"
     },
     {
@@ -34,9 +70,21 @@
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T004",
-      "section": "prompt-resolution",
-      "title": "Implement binary-relative prompts directory resolution: use std::env::current_exe() to get binary path, resolve config/prompts/ as a sibling directory",
+      "id": "P2-T016",
+      "section": "rust-llm-pipeline",
+      "title": "Without --prompt or --prompt-file, preserve phase 1 behaviour: print raw transcript to stdout and exit 0",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T013b",
+      "section": "rust-llm-pipeline",
+      "title": "Pass `--model <name>` to `python3 src/core/transcribe.py` subprocess when --model flag is given",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T006",
+      "section": "prompt-list",
+      "title": "Print `error: prompts directory not found: config/prompts/` to stderr and exit 1 when the binary-relative config/prompts/ directory is absent",
       "implementation_status": "to do"
     },
     {
@@ -49,12 +97,6 @@
       "id": "P2-T005b",
       "section": "prompt-list",
       "title": "For --list-prompts: print `Available prompts (config/prompts/):` header followed by alphabetically sorted `  <stem>  <description>` lines to stdout and exit 0",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T006",
-      "section": "prompt-list",
-      "title": "Print `error: prompts directory not found: config/prompts/` to stderr and exit 1 when the binary-relative config/prompts/ directory is absent",
       "implementation_status": "to do"
     },
     {
@@ -94,12 +136,6 @@
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T013b",
-      "section": "rust-llm-pipeline",
-      "title": "Pass `--model <name>` to `python3 src/core/transcribe.py` subprocess when --model flag is given",
-      "implementation_status": "to do"
-    },
-    {
       "id": "P2-T014",
       "section": "rust-llm-pipeline",
       "title": "Stream llm.py subprocess stdout to terminal in real time using a byte buffer (not line-by-line, to avoid buffering tokens until newline)",
@@ -109,12 +145,6 @@
       "id": "P2-T015",
       "section": "rust-llm-pipeline",
       "title": "On non-zero llm.py exit, print `error: LLM generation failed — <subprocess stderr>` to stderr and exit 1",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T016",
-      "section": "rust-llm-pipeline",
-      "title": "Without --prompt or --prompt-file, preserve phase 1 behaviour: print raw transcript to stdout and exit 0",
       "implementation_status": "to do"
     },
     {
@@ -224,36 +254,6 @@
       "section": "tests",
       "title": "Add test: ollama.chat failure raises RuntimeError",
       "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T034",
-      "section": "bundled-prompts",
-      "title": "Create config/prompts/email-reply.toml with name, description, system fields",
-      "implementation_status": "done"
-    },
-    {
-      "id": "P2-T035",
-      "section": "bundled-prompts",
-      "title": "Create config/prompts/meeting-notes.toml with name, description, system fields",
-      "implementation_status": "done"
-    },
-    {
-      "id": "P2-T036",
-      "section": "bundled-prompts",
-      "title": "Create config/prompts/slack-message.toml with name, description, system fields",
-      "implementation_status": "done"
-    },
-    {
-      "id": "P2-T037",
-      "section": "bundled-prompts",
-      "title": "Create config/prompts/action-items.toml with name, description, system fields",
-      "implementation_status": "done"
-    },
-    {
-      "id": "P2-T038",
-      "section": "bundled-prompts",
-      "title": "Create config/prompts/journal.toml with name, description, system fields",
-      "implementation_status": "done"
     },
     {
       "id": "P2-T039",
