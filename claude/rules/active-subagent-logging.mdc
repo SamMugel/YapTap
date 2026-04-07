@@ -1,0 +1,16 @@
+---
+description: Track and log the number of active subagents during subagent lifecycle events
+globs:
+alwaysApply: true
+---
+
+# Active Subagent Count Logging
+
+When spawning and completing subagents, always track active subagents and log the current total.
+
+- On subagent start:
+  - `activeAgents.add(agentId)`
+  - `console.log("Active agents:", activeAgents.size)`
+- On subagent completion:
+  - `activeAgents.delete(agentId)`
+  - `console.log("Active agents:", activeAgents.size)`

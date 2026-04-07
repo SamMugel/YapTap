@@ -55,3 +55,4 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - SIGINT exits with code 130 and cleans up temp files
 - Prompts live in `config/prompts/`; add `.toml` files there to extend the prompt library
 - `llm.py` reads transcript from stdin, streams response to stdout
+
