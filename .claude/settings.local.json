@@ -7,7 +7,11 @@
       "Bash(git rm:*)",
       "Bash(git push:*)",
       "Bash(claude doctor:*)",
-      "Bash(python3 -c \"import json; json.load\\(open\\('PRD/PRD_1.json'\\)\\)\")"
+      "Bash(python3 -c \"import json; json.load\\(open\\('PRD/PRD_1.json'\\)\\)\")",
+      "Bash(cargo build:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(python:*)",
+      "Bash(git tag:*)"
     ]
   }
 }
