@@ -5,7 +5,7 @@
 /// optionally pipes the transcript through an LLM via `python3 src/core/llm.py`.
 use std::{
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -63,7 +63,7 @@ fn prompts_dir() -> Option<PathBuf> {
         .and_then(|p| p.parent().map(|d| d.join("config/prompts")))
 }
 
-fn validate_prompt_toml(content: &str, path: &PathBuf) {
+fn validate_prompt_toml(content: &str, path: &Path) {
     match toml::from_str::<toml::Value>(content) {
         Err(_) => {
             eprintln!("error: prompt file is not valid TOML: {}", path.display());
