@@ -58,9 +58,19 @@ struct PromptToml {
 // ── Helper functions ──────────────────────────────────────────────────────────
 
 fn prompts_dir() -> Option<PathBuf> {
-    std::env::current_exe()
+    // Prefer <binary_dir>/config/prompts; fall back to <cwd>/config/prompts
+    // so that development builds (target/debug/) find the project-root prompts.
+    let bin_relative = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("config/prompts")))
+        .and_then(|p| p.parent().map(|d| d.join("config/prompts")));
+    if let Some(ref p) = bin_relative {
+        if p.is_dir() {
+            return bin_relative;
+        }
+    }
+    std::env::current_dir()
+        .ok()
+        .map(|d| d.join("config/prompts"))
 }
 
 fn validate_prompt_toml(content: &str, path: &Path) {
