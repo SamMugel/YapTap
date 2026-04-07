@@ -9,7 +9,7 @@
       "Bundled default prompts in config/prompts/ (TOML format)",
       "yaptap --list-prompts: list available prompts from config/prompts/",
       "Python llm.py subprocess: stdin transcript + prompt file → streamed ollama response",
-      "Rust: spawn llm.py with transcript on stdin, stream stdout to terminal",
+      "Rust: spawn llm.py with transcript on stdin, stream stdout to terminal via byte buffer",
       "Unit tests for llm.py",
       "Phase 2 error handling and exit codes"
     ],
@@ -22,25 +22,31 @@
   },
   "tasks": [
     {
-      "id": "P2-T001",
-      "section": "rust-flags",
-      "title": "Add clap (or manual arg parsing) to parse --prompt, --prompt-file, --model, --llm-model, --list-prompts flags in main.rs",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T002",
-      "section": "rust-flags",
-      "title": "Emit error: --prompt and --prompt-file are mutually exclusive to stderr and exit 1 when both are given",
-      "implementation_status": "to do"
-    },
-    {
       "id": "P2-T003",
       "section": "rust-deps",
       "title": "Add `toml` crate to Cargo.toml for prompt file parsing in Rust",
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T004b",
+      "id": "P2-T003b",
+      "section": "rust-deps",
+      "title": "Add `clap` crate with `derive` feature to Cargo.toml for CLI flag parsing",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T001",
+      "section": "rust-flags",
+      "title": "Define `Args` struct with `clap::Parser` derive covering --prompt, --prompt-file, --model, --llm-model, --list-prompts fields; parse at start of `main()`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T002",
+      "section": "rust-flags",
+      "title": "Emit `error: --prompt and --prompt-file are mutually exclusive` to stderr and exit 1 when both flags are given",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T004",
       "section": "prompt-resolution",
       "title": "Implement binary-relative prompts directory resolution: use std::env::current_exe() to get binary path, resolve config/prompts/ as a sibling directory",
       "implementation_status": "to do"
@@ -48,55 +54,79 @@
     {
       "id": "P2-T005",
       "section": "prompt-list",
-      "title": "Implement --list-prompts: resolve prompts dir as <binary_dir>/config/prompts/ via std::env::current_exe(), read *.toml files, parse name and description fields, print sorted table, exit 0",
+      "title": "For --list-prompts: read all *.toml files from the prompts dir and parse the name and description fields from each file",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T005b",
+      "section": "prompt-list",
+      "title": "For --list-prompts: print `Available prompts (config/prompts/):` header followed by alphabetically sorted `  <stem>  <description>` lines to stdout and exit 0",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T006",
       "section": "prompt-list",
-      "title": "Print error: prompts directory not found: <binary_dir>/config/prompts/ to stderr and exit 1 when the binary-relative config/prompts/ directory is absent",
+      "title": "Print `error: prompts directory not found: config/prompts/` to stderr and exit 1 when the binary-relative config/prompts/ directory is absent",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T007",
       "section": "prompt-resolution",
-      "title": "Implement --prompt <name> resolution: resolve prompts dir as <binary_dir>/config/prompts/ via std::env::current_exe(), look up <name>.toml there, emit error: prompt '<name>' not found in <binary_dir>/config/prompts/ on miss, exit 1",
+      "title": "Implement --prompt <name> resolution: look up <name>.toml in <binary_dir>/config/prompts/; emit `error: prompt '<name>' not found in config/prompts/` to stderr and exit 1 on miss",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T010",
       "section": "prompt-resolution",
-      "title": "Implement --prompt-file <path> resolution: validate file exists, emit error: prompt file not found: <path> on miss, exit 1",
+      "title": "Implement --prompt-file <path> resolution: validate file exists; emit `error: prompt file not found: <path>` to stderr and exit 1 on miss",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T011",
       "section": "prompt-resolution",
-      "title": "Validate prompt TOML in Rust: check name, description, system fields present; emit error: prompt file invalid — missing field '<field>': <path> on failure, exit 1",
+      "title": "Validate prompt TOML in Rust: on TOML parse failure emit `error: prompt file is not valid TOML: <path>` to stderr and exit 1",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T011b",
+      "section": "prompt-resolution",
+      "title": "Validate prompt TOML in Rust: check name, description, system fields present; emit `error: prompt file invalid — missing field '<field>': <path>` to stderr and exit 1 on missing field",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T012",
       "section": "rust-llm-pipeline",
-      "title": "After successful transcription, when a prompt is selected, print Thinking... to stdout",
+      "title": "After successful transcription, when a prompt is selected, print `Thinking...` to stdout",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T013",
       "section": "rust-llm-pipeline",
-      "title": "Spawn python3 src/core/llm.py --prompt-file <path> [--model <name>] with transcript piped to subprocess stdin",
+      "title": "Spawn `python3 src/core/llm.py --prompt-file <path> [--model <name>]` with transcript piped to subprocess stdin",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T013b",
+      "section": "rust-llm-pipeline",
+      "title": "Pass `--model <name>` to `python3 src/core/transcribe.py` subprocess when --model flag is given",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T042",
+      "section": "rust-llm-pipeline",
+      "title": "Wrap llm.py `Child` handle in `Arc<Mutex<Option<Child>>>` so the ctrlc handler can kill the subprocess on SIGINT",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T014",
       "section": "rust-llm-pipeline",
-      "title": "Stream subprocess stdout to terminal in real time (read and print line by line as tokens arrive)",
+      "title": "Stream llm.py subprocess stdout to terminal in real time using a byte buffer (not line-by-line, to avoid buffering tokens until newline)",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T015",
       "section": "rust-llm-pipeline",
-      "title": "On non-zero llm.py exit, print error: LLM generation failed — <subprocess stderr> to stderr and exit 1",
+      "title": "On non-zero llm.py exit, print `error: LLM generation failed — <subprocess stderr>` to stderr and exit 1",
       "implementation_status": "to do"
     },
     {
@@ -108,13 +138,13 @@
     {
       "id": "P2-T016b",
       "section": "signal-handling",
-      "title": "Extend ctrlc handler to kill the llm.py subprocess Child handle and delete temp WAV file on SIGINT during LLM streaming, then exit 130",
+      "title": "Extend ctrlc handler to kill the llm.py subprocess via the shared Child handle and delete temp WAV file on SIGINT during LLM streaming, then exit 130",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T017",
       "section": "python-scaffolding",
-      "title": "Create src/core/llm.py with module-level docstring, imports (argparse, logging, sys, pathlib, tomllib, ollama), and empty stubs for stream_response() and main()",
+      "title": "Create src/core/llm.py with module-level docstring, imports (argparse, logging, sys, pathlib, tomllib, ollama), empty stubs for stream_response() and main(), and `if __name__ == '__main__': main()` guard",
       "implementation_status": "to do"
     },
     {
@@ -138,7 +168,13 @@
     {
       "id": "P2-T021",
       "section": "python-implementation",
-      "title": "Parse prompt TOML in stream_response() using tomllib; raise ValueError on parse error or missing 'system' field",
+      "title": "Parse prompt TOML in stream_response() using tomllib; raise ValueError on parse error",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T021b",
+      "section": "python-implementation",
+      "title": "Validate 'system' field present in parsed TOML dict in stream_response(); raise ValueError if missing",
       "implementation_status": "to do"
     },
     {
@@ -150,19 +186,37 @@
     {
       "id": "P2-T023",
       "section": "python-implementation",
-      "title": "Call ollama.chat(model, messages, stream=True) and yield each token chunk; wrap failures as RuntimeError",
+      "title": "Call ollama.chat(model, messages, stream=True), yield each token via chunk['message']['content'], and wrap ollama failures as RuntimeError",
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T024",
+      "id": "P2-T024a",
       "section": "python-implementation",
-      "title": "Implement main(): read transcript from stdin, parse --prompt-file and --model args, iterate stream_response(), print each chunk with flush=True, print final newline",
+      "title": "Parse --prompt-file (required) and --model (optional, default 'llama3') args using argparse in main()",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T024b",
+      "section": "python-implementation",
+      "title": "Read transcript from stdin in main()",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T024c",
+      "section": "python-implementation",
+      "title": "Iterate stream_response() in main() and print each token chunk to stdout with flush=True",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T024d",
+      "section": "python-implementation",
+      "title": "Print final newline after all token chunks in main()",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T025",
       "section": "python-implementation",
-      "title": "Print error: <message> to stderr and exit 1 for ValueError and RuntimeError in main()",
+      "title": "Print `error: <message>` to stderr and exit 1 for ValueError and RuntimeError in main()",
       "implementation_status": "to do"
     },
     {
@@ -211,6 +265,12 @@
       "id": "P2-T033",
       "section": "tests",
       "title": "Add test: ollama.chat failure raises RuntimeError",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T041",
+      "section": "tests",
+      "title": "Document llm_test.py test command: `python -m unittest src.core.llm_test`",
       "implementation_status": "to do"
     },
     {
