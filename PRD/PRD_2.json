@@ -124,6 +124,12 @@
       "implementation_status": "to do"
     },
     {
+      "id": "P2-T018",
+      "section": "python-scaffolding",
+      "title": "Add AI intent comment block for stream_response() purpose and invariants",
+      "implementation_status": "to do"
+    },
+    {
       "id": "P2-T019",
       "section": "python-implementation",
       "title": "Validate prompt_path is non-empty in stream_response() and raise ValueError otherwise",
