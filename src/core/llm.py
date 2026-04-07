@@ -10,7 +10,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    import tomli as tomllib  # type: ignore[no-redef]
 from pathlib import Path
 from typing import Iterator
 
