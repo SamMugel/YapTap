@@ -17,5 +17,5 @@ Implementation tasks are tracked in `PRD/`, one file per phase.
 | [specs/cli.md](specs/cli.md) | CLI interface specification for `yaptap` (phases 1 & 2) |
 | [specs/audio-recording.md](specs/audio-recording.md) | Microphone capture: format, device selection, lifecycle |
 | [specs/transcription.md](specs/transcription.md) | Whisper transcription via Python subprocess |
-| [specs/prompts.md](specs/prompts.md) | Prompt file format, bundled defaults, discovery, init command |
+| [specs/prompts.md](specs/prompts.md) | Prompt file format, bundled defaults, binary-relative discovery |
 | [specs/llm.md](specs/llm.md) | Ollama LLM integration via Python subprocess (`llm.py`) |

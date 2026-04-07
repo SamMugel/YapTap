@@ -118,7 +118,7 @@ for chunk in response:
 print()  # final newline
 ```
 
-The Rust binary reads the subprocess stdout line-by-line and echoes each line to the terminal as it arrives, giving the user real-time output.
+The Rust binary reads the subprocess stdout chunk-by-chunk (byte buffer, not line-by-line) and writes each chunk to the terminal immediately. Reading line-by-line would buffer the entire response until a newline, defeating streaming.
 
 ---
 
@@ -182,6 +182,7 @@ The Rust binary checks:
 1. `ollama` Python package available — validated implicitly; subprocess exit code surfaces the error.
 2. Subprocess exit code — if non-zero, print `error: LLM generation failed — <subprocess stderr>` to stderr, exit 1.
 3. Empty stdout — treated as an empty LLM response; print as blank line.
+4. SIGINT during streaming — the `ctrlc` handler kills the `llm.py` subprocess (via the `Child` handle), deletes any remaining temp WAV file, and exits 130.
 
 ---
 

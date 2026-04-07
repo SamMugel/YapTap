@@ -4,7 +4,7 @@
   "goal": "`$ yaptap --prompt <name>` records, transcribes, then pipes the transcript through an ollama LLM with a user-selected prompt, streaming the result to stdout.",
   "scope": {
     "in_scope": [
-      "CLI flags: --prompt, --prompt-file, --model, --llm-model, --list-prompts",
+      "CLI flags: --prompt, --prompt-file, --model, --llm-model, --list-prompts; binary-relative config/prompts/ resolution via std::env::current_exe()",
       "Prompt TOML file format and validation",
       "Bundled default prompts in config/prompts/ (TOML format)",
       "yaptap --list-prompts: list available prompts from config/prompts/",
@@ -40,21 +40,27 @@
       "implementation_status": "to do"
     },
     {
+      "id": "P2-T004b",
+      "section": "prompt-resolution",
+      "title": "Implement binary-relative prompts directory resolution: use std::env::current_exe() to get binary path, resolve config/prompts/ as a sibling directory",
+      "implementation_status": "to do"
+    },
+    {
       "id": "P2-T005",
       "section": "prompt-list",
-      "title": "Implement --list-prompts: read config/prompts/*.toml, parse name and description fields, print sorted table, exit 0",
+      "title": "Implement --list-prompts: resolve prompts dir as <binary_dir>/config/prompts/ via std::env::current_exe(), read *.toml files, parse name and description fields, print sorted table, exit 0",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T006",
       "section": "prompt-list",
-      "title": "Print error: prompts directory not found: config/prompts/ to stderr and exit 1 when config/prompts/ is absent",
+      "title": "Print error: prompts directory not found: <binary_dir>/config/prompts/ to stderr and exit 1 when the binary-relative config/prompts/ directory is absent",
       "implementation_status": "to do"
     },
     {
       "id": "P2-T007",
       "section": "prompt-resolution",
-      "title": "Implement --prompt <name> resolution: look up config/prompts/<name>.toml, emit error: prompt '<name>' not found in config/prompts/ on miss, exit 1",
+      "title": "Implement --prompt <name> resolution: resolve prompts dir as <binary_dir>/config/prompts/ via std::env::current_exe(), look up <name>.toml there, emit error: prompt '<name>' not found in <binary_dir>/config/prompts/ on miss, exit 1",
       "implementation_status": "to do"
     },
     {
@@ -97,6 +103,12 @@
       "id": "P2-T016",
       "section": "rust-llm-pipeline",
       "title": "Without --prompt or --prompt-file, preserve phase 1 behaviour: print raw transcript to stdout and exit 0",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P2-T016b",
+      "section": "signal-handling",
+      "title": "Extend ctrlc handler to kill the llm.py subprocess Child handle and delete temp WAV file on SIGINT during LLM streaming, then exit 130",
       "implementation_status": "to do"
     },
     {

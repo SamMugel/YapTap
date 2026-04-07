@@ -62,7 +62,7 @@ YapTap/
 │       ├── llm.py               # Ollama wrapper: stdin transcript + prompt → streamed response
 │       └── llm_test.py          # co-located unit tests for llm.py
 ├── config/
-│   └── prompts/                 # bundled default prompt TOML files (embedded at compile time)
+│   └── prompts/                 # bundled default prompt TOML files (binary-relative at runtime)
 │       ├── email-reply.toml
 │       ├── meeting-notes.toml
 │       ├── slack-message.toml
@@ -75,6 +75,7 @@ YapTap/
 └── SPECS.md
 ```
 
+At runtime, Rust resolves the prompts directory as `<binary_dir>/config/prompts/` using `std::env::current_exe()`.
 
 ---
 
