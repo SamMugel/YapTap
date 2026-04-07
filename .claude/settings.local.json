@@ -11,7 +11,16 @@
       "Bash(cargo build:*)",
       "Bash(cargo clippy:*)",
       "Bash(python:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(find:*)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap log --all --oneline)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap log --all -p --follow -- \"**/.env\" \"*.env\")",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap log --all -S 'sk-' -S 'AKIA' -S 'password' --oneline)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap show 268dbf1 --)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap show 88bfc1a --)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap status)",
+      "Bash(git -C /Users/sam.mugel/git/personal/YapTap diff --cached)",
+      "Bash(git:*)"
     ]
   }
 }
