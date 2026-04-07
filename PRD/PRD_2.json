@@ -22,18 +22,6 @@
   },
   "tasks": [
     {
-      "id": "P2-T003",
-      "section": "rust-deps",
-      "title": "Add `toml` crate to Cargo.toml for prompt file parsing in Rust",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T003b",
-      "section": "rust-deps",
-      "title": "Add `clap` crate with `derive` feature to Cargo.toml for CLI flag parsing",
-      "implementation_status": "to do"
-    },
-    {
       "id": "P2-T001",
       "section": "rust-flags",
       "title": "Define `Args` struct with `clap::Parser` derive covering --prompt, --prompt-file, --model, --llm-model, --list-prompts fields; parse at start of `main()`",
@@ -112,12 +100,6 @@
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T042",
-      "section": "rust-llm-pipeline",
-      "title": "Wrap llm.py `Child` handle in `Arc<Mutex<Option<Child>>>` so the ctrlc handler can kill the subprocess on SIGINT",
-      "implementation_status": "to do"
-    },
-    {
       "id": "P2-T014",
       "section": "rust-llm-pipeline",
       "title": "Stream llm.py subprocess stdout to terminal in real time using a byte buffer (not line-by-line, to avoid buffering tokens until newline)",
@@ -138,19 +120,7 @@
     {
       "id": "P2-T016b",
       "section": "signal-handling",
-      "title": "Extend ctrlc handler to kill the llm.py subprocess via the shared Child handle and delete temp WAV file on SIGINT during LLM streaming, then exit 130",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T017",
-      "section": "python-scaffolding",
-      "title": "Create src/core/llm.py with module-level docstring, imports (argparse, logging, sys, pathlib, tomllib, ollama), empty stubs for stream_response() and main(), and `if __name__ == '__main__': main()` guard",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T018",
-      "section": "python-scaffolding",
-      "title": "Add AI intent comment block for stream_response() purpose and invariants",
+      "title": "Extend ctrlc handler to kill the llm.py subprocess and delete temp WAV file on SIGINT during LLM streaming, then exit 130",
       "implementation_status": "to do"
     },
     {
@@ -190,27 +160,9 @@
       "implementation_status": "to do"
     },
     {
-      "id": "P2-T024a",
+      "id": "P2-T024",
       "section": "python-implementation",
-      "title": "Parse --prompt-file (required) and --model (optional, default 'llama3') args using argparse in main()",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T024b",
-      "section": "python-implementation",
-      "title": "Read transcript from stdin in main()",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T024c",
-      "section": "python-implementation",
-      "title": "Iterate stream_response() in main() and print each token chunk to stdout with flush=True",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T024d",
-      "section": "python-implementation",
-      "title": "Print final newline after all token chunks in main()",
+      "title": "Implement main(): read transcript from stdin, parse --prompt-file and --model args, iterate stream_response(), print each chunk with flush=True, print final newline",
       "implementation_status": "to do"
     },
     {
@@ -265,12 +217,6 @@
       "id": "P2-T033",
       "section": "tests",
       "title": "Add test: ollama.chat failure raises RuntimeError",
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P2-T041",
-      "section": "tests",
-      "title": "Document llm_test.py test command: `python -m unittest src.core.llm_test`",
       "implementation_status": "to do"
     },
     {
