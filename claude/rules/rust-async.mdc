@@ -47,23 +47,32 @@ Rust async is zero-cost but not zero-complexity. Choose the right model before w
 
 ## Testing async code
 
+Always wrap the async call in `tokio::time::timeout` — every async test must have a deadline to prevent silent hangs (see `rust-testing.mdc`):
+
 ```rust
 #[tokio::test]
 async fn test_fetch() {
-    let result = fetch("http://example.com").await.unwrap();
-    assert!(!result.is_empty());
-}
-
-// For timeouts in tests:
-#[tokio::test(flavor = "multi_thread")]
-async fn test_with_timeout() {
     let result = tokio::time::timeout(
         Duration::from_secs(5),
         fetch("http://example.com"),
     )
     .await
-    .expect("timed out")
+    .expect("test timed out")
     .expect("fetch failed");
+    assert!(!result.is_empty());
+}
+
+// Use multi_thread flavor only when you need real parallelism:
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fetch_parallel() {
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        fetch("http://example.com"),
+    )
+    .await
+    .expect("test timed out")
+    .expect("fetch failed");
+    assert!(!result.is_empty());
 }
 ```
 
