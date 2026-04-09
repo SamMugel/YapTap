@@ -21,6 +21,8 @@ The transcript is passed via **stdin** (UTF-8 text, newline-terminated).
 | `--prompt-file <path>` | yes | — | Absolute path to a prompt TOML file |
 | `--model <name>` | no | `llama3` | Ollama model name |
 
+**Flag translation:** the user-facing Rust CLI flag is `--llm-model`; Rust maps it to `--model` when spawning the subprocess. The Python script only knows `--model`.
+
 ### Output
 
 - **stdout:** LLM response, streamed to stdout as tokens arrive. Each chunk is printed immediately (no buffering). Ends with a final `\n`.

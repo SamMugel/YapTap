@@ -14,10 +14,12 @@ Created automatically on first launch with default values. The directory `~/.con
 
 ```toml
 # YapTap configuration
-# Edit this file and restart YapTap to apply changes to the hotkey.
+# Edit this file and restart YapTap to apply changes to hotkey or model fields.
 
 hotkey = "option+space"    # global hotkey to start/stop recording
 selected_prompt = ""       # stem of selected prompt file; empty = No Prompt
+whisper_model = "base"     # Whisper model for transcription
+llm_model = "llama3"       # Ollama model for LLM inference
 ```
 
 ---
@@ -28,6 +30,8 @@ selected_prompt = ""       # stem of selected prompt file; empty = No Prompt
 |---|---|---|---|
 | `hotkey` | string | `"option+space"` | Global hotkey used to start and stop recording |
 | `selected_prompt` | string | `""` | Filename stem of the active prompt (e.g. `"email-reply"`), or `""` for No Prompt |
+| `whisper_model` | string | `"base"` | Whisper model name passed to `transcribe.py` |
+| `llm_model` | string | `"llama3"` | Ollama model name passed to `llm.py` as `--model` |
 
 ---
 
@@ -78,11 +82,11 @@ All tokens are lowercase. The key must be the last token.
 |---|---|---|
 | Read | On launch | Rust app |
 | Write (`selected_prompt`) | When user picks a prompt from the menu | Rust app (atomic write) |
-| Write (`hotkey`) | Never — user edits the file directly | — |
+| Write (`hotkey`, `whisper_model`, `llm_model`) | Never — user edits the file directly | — |
 
 **Atomic write:** the app writes to `~/.config/yaptap/config.toml.tmp`, then renames it to `config.toml`. This prevents a corrupted file on crash during write.
 
-**Hotkey changes require a restart.** After editing `hotkey` in the config file, quit and re-launch YapTap.
+**Restart required for:** `hotkey`, `whisper_model`, `llm_model`. After editing these fields, quit and re-launch YapTap. `selected_prompt` changes made by hand are overwritten the next time the user picks from the menu.
 
 ---
 
@@ -94,5 +98,5 @@ All tokens are lowercase. The key must be the last token.
 | `~/.config/yaptap/` absent | Directory and file created with defaults |
 | TOML parse error | Alert: *"Config file is not valid TOML: ~/.config/yaptap/config.toml — using defaults."* |
 | Unknown or malformed `hotkey` value | Alert: *"Unknown hotkey '<value>' — using default: option+space."* |
-| `selected_prompt` stem not found in `config/prompts/` | Falls back to No Prompt silently; corrects the in-memory selection but does not rewrite the file |
+| `selected_prompt` stem not found in `config/prompts/` | Falls back to No Prompt silently; corrects the in-memory selection but does not rewrite the file — the stale value persists on disk until the user makes an explicit selection from the menu, at which point the atomic write overwrites it |
 | Atomic write failure | Log warning to stderr; continue with in-memory state |

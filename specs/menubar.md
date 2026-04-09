@@ -32,7 +32,9 @@ The CLI modes from Phases 1 and 2 still work when any flag is passed (see [cli.m
 6. If Accessibility permission is not granted, shows an alert (see [hotkey.md](hotkey.md)).
 7. Runs the `NSRunLoop` indefinitely until the user selects **Quit YapTap**.
 
-**Single-instance guard:** if a second `yaptap` process is launched with no flags, it detects the first via a lock file at `~/.config/yaptap/yaptap.lock` and exits 0 immediately.
+**Model selection in app mode:** the Whisper model and Ollama model are read from `whisper_model` and `llm_model` in the config file (see [config.md](config.md)). There is no in-app UI for model selection; edit the config file directly.
+
+**Single-instance guard:** on launch the app writes its PID to `~/.config/yaptap/yaptap.lock`. If that file already exists, the new process reads the stored PID and checks whether it is still alive (`kill -0 <pid>`). If alive, the new process exits 0 immediately. If the process is dead (stale lock from a crash), the new process overwrites the lock file with its own PID and continues normally. The lock file is deleted on clean exit (including **Quit YapTap** and SIGTERM).
 
 ---
 
@@ -68,11 +70,11 @@ On error the icon returns to Idle; an alert dialog surfaces the error message.
 Clicking the menu bar icon opens a dropdown:
 
 ```
+   Action Items
 ✓  Email Reply
+   Journal
    Meeting Notes
    Slack Message
-   Action Items
-   Journal
    ─────────────────────────
    No Prompt
    ─────────────────────────
@@ -82,11 +84,11 @@ Clicking the menu bar icon opens a dropdown:
    Quit YapTap
 ```
 
-- Prompt entries are loaded from `config/prompts/` at launch and refreshed each time the menu is opened.
+- Prompt entries are loaded from `config/prompts/` at launch and refreshed each time the menu is opened, sorted alphabetically by filename stem (matching `--list-prompts` output order).
 - The currently selected prompt has a checkmark (✓). Only one item is checked at a time.
 - **No Prompt** puts the raw transcript on the clipboard with no LLM step.
 - The hotkey display item is non-interactive; it shows the currently configured hotkey.
-- **Open Config…** opens `~/.config/yaptap/config.toml` in the default text editor via `open`.
+- **Open Config…** opens `~/.config/yaptap/config.toml` in the default text editor via `open`. Changes to `hotkey` require restarting YapTap to take effect; changes to `selected_prompt` or model fields are overwritten by the app the next time the user picks from the menu.
 - **Quit YapTap** kills any in-progress subprocess, deletes temp files, removes the lock file, and exits 0.
 
 ### Prompt Selection Persistence

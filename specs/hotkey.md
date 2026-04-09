@@ -59,7 +59,7 @@ Additional rules:
 1. Audio capture stops; PCM buffer is flushed to a temp WAV file.
 2. App transitions `RECORDING → PROCESSING` (icon stays Active).
 3. Transcription: `transcribe.py` subprocess is spawned with the WAV path.
-4. If the selected prompt is not **No Prompt**: `llm.py` subprocess is spawned with the transcript on stdin and the prompt file path as `--prompt-file`. Tokens are collected internally (not streamed to a terminal).
+4. If the selected prompt is not **No Prompt**: `llm.py` subprocess is spawned with the transcript on stdin and the prompt file path as `--prompt-file`. Rust reads the subprocess stdout into a buffer until EOF; the complete text is assembled in memory before the next step (unlike CLI mode, tokens are not echoed to a terminal as they arrive).
 5. If **No Prompt** is selected: the raw transcript is used directly.
 6. The complete text (transcript or LLM output) is written to the system clipboard via `NSPasteboard` as `NSPasteboardTypeString`.
 7. Temp WAV file is deleted.
@@ -88,7 +88,7 @@ Additional rules:
 If `CGEventTap` fails to register (e.g. permission denied or system-level conflict):
 
 1. Log the error to stderr.
-2. Show a one-time alert: *"The hotkey ⌥Space could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap."*
+2. Show a one-time alert: *"The hotkey '<configured-hotkey>' could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap."* (where `<configured-hotkey>` is the value read from the config file, e.g. `option+space`)
 3. The app remains running; the menu bar icon is still functional.
 
 ---

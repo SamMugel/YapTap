@@ -1,4 +1,4 @@
-# CLI Specification (Phases 1 & 2)
+# CLI Specification (Phases 1–3)
 
 ## Invocation
 

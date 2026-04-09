@@ -75,8 +75,6 @@ YapTap/
 └── SPECS.md
 ```
 
-At runtime, Rust resolves the prompts directory as `<binary_dir>/config/prompts/` using `std::env::current_exe()`.
-
 ---
 
 ## Phase 2 Component Diagram
@@ -110,19 +108,12 @@ At runtime, Rust resolves the prompts directory as `<binary_dir>/config/prompts/
 
 ## Subprocess Contract
 
-`yaptap` communicates with Python scripts through a simple stdio contract:
+`yaptap` communicates with Python scripts through a simple stdio contract. The authoritative details are in [transcription.md](transcription.md) and [llm.md](llm.md); this is a summary.
 
-### `transcribe.py`
-- **stdin:** nothing (WAV path is a CLI argument)
-- **stdout:** UTF-8 transcript text, newline-terminated
-- **stderr:** forwarded to terminal for debugging
-- **exit code:** 0 on success, non-zero on error
-
-### `llm.py`
-- **stdin:** transcript text (UTF-8, newline-terminated)
-- **stdout:** LLM response, streamed token by token; final `\n` at end
-- **stderr:** forwarded to terminal for debugging
-- **exit code:** 0 on success, non-zero on error
+| Script | stdin | stdout | stderr | exit code |
+|---|---|---|---|---|
+| `transcribe.py` | nothing (WAV path is a CLI arg) | UTF-8 transcript, newline-terminated | forwarded for debugging | 0 success / non-zero error |
+| `llm.py` | UTF-8 transcript, newline-terminated | LLM response streamed token by token; final `\n` | forwarded for debugging | 0 success / 1 error |
 
 `yaptap` propagates non-zero exit codes to the user as an error message and exits 1.
 
@@ -143,6 +134,9 @@ Note: user-facing terminal output (the transcript, status lines) uses `println!`
 
 ### Rust (phase 2 additions)
 - [`toml`](https://crates.io/crates/toml) — parse prompt TOML files
+
+### System
+- `ffmpeg` — required by Whisper for audio decoding; must be on `PATH`
 
 ### Python
 - `openai-whisper` — transcription (installed in user environment)

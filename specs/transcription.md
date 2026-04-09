@@ -169,5 +169,5 @@ pip install openai-whisper
 The Rust binary checks:
 
 1. `python3` is on `PATH` — if not, emit `error!(...)` via `tracing` and print `error: python3 not found` to stderr, exit 1.
-2. Subprocess exit code — if non-zero, emit `error!(...)` via `tracing` and print `error: transcription failed` plus captured stderr, exit 1.
+2. Subprocess exit code — if non-zero, emit `error!(...)` via `tracing` and print `error: transcription failed — <subprocess stderr>` to stderr, exit 1.
 3. Empty stdout — treated as a successful empty transcript (printed as blank line).
