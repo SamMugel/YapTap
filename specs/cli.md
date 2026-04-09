@@ -7,7 +7,7 @@ $ yaptap [--prompt <name> | --prompt-file <path>] [--model <whisper_model>] [--l
 $ yaptap --list-prompts
 ```
 
-No flags are required. Without `--prompt` or `--prompt-file`, behaviour is phase 1: raw transcript to stdout.
+**Phase 3 note:** `yaptap` with no flags starts the menu bar app instead of the CLI recording flow. To use the CLI recording flow in phase 3+, at least one flag must be provided (e.g. `--prompt <name>`). See [menubar.md](menubar.md).
 
 ---
 

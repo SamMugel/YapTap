@@ -19,3 +19,6 @@ Implementation tasks are tracked in `PRD/`, one file per phase.
 | [specs/transcription.md](specs/transcription.md) | Whisper transcription via Python subprocess |
 | [specs/prompts.md](specs/prompts.md) | Prompt file format, bundled defaults, binary-relative discovery |
 | [specs/llm.md](specs/llm.md) | Ollama LLM integration via Python subprocess (`llm.py`) |
+| [specs/menubar.md](specs/menubar.md) | Menu bar app: lifecycle, icon design, menu structure (phase 3) |
+| [specs/hotkey.md](specs/hotkey.md) | Global hotkey: registration, state machine, clipboard output (phase 3) |
+| [specs/config.md](specs/config.md) | Configuration file: location, format, hotkey syntax (phase 3) |

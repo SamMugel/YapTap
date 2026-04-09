@@ -39,12 +39,27 @@ Detailed specs: [prompts.md](prompts.md), [llm.md](llm.md)
 
 ---
 
-## Phase 3 — Hotkey + Prompt Menu (high-level)
+## Phase 3 — Menu Bar App + Global Hotkey
 
-- A background daemon (`yaptapd`) registers a global hotkey via macOS `CGEventTap`.
-- First hotkey press → start recording (visual indicator in menu bar or tray).
-- Second hotkey press → stop recording, run transcription + LLM pipeline.
-- A lightweight TUI or native menu lists available prompts; user selects before or after invoking the hotkey.
+**Goal:** `yaptap` with no flags starts a persistent macOS menu bar app. A global hotkey (⌥Space by default) starts and stops recording; the result is placed on the clipboard. The user selects an active prompt from the menu bar dropdown.
+
+Detailed specs: [menubar.md](menubar.md), [hotkey.md](hotkey.md), [config.md](config.md)
+
+### Deliverables
+- `yaptap` with no args starts as a menu bar app (`NSApplication` in `LSUIElement` mode; no Dock icon).
+- Menu bar icon: three-bar equalizer, two variants — Idle (bars at 6:10:6 heights) and Active (bars at 10:10:10).
+- Dropdown menu listing all prompts from `config/prompts/`; sticky prompt selection.
+- Global hotkey (default ⌥Space): first press starts recording, second press stops and runs the pipeline.
+- LLM output (or raw transcript if No Prompt) placed on the system clipboard via `NSPasteboard`.
+- Config file `~/.config/yaptap/config.toml` persists hotkey and prompt selection across launches.
+- Single-instance guard via lock file (`~/.config/yaptap/yaptap.lock`).
+- Accessibility permission prompt on first launch if not already granted.
+- CLI modes (`--prompt`, `--list-prompts`, `--device`, etc.) continue to work exactly as in Phase 2.
+
+### Out of scope for Phase 3
+- Cursor injection at current caret position (Phase 4).
+- System notifications.
+- Hotkey configuration via an in-app UI (config file is edited directly).
 
 ---
 

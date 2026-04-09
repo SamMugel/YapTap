@@ -148,3 +148,63 @@ Note: user-facing terminal output (the transcript, status lines) uses `println!`
 - `openai-whisper` — transcription (installed in user environment)
 - `ollama` — LLM client (phase 2)
 - Standard library: `argparse`, `sys`, `pathlib`, `logging`, `tomllib` (Python 3.11+)
+
+---
+
+## Phase 3 Component Diagram
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    yaptap (Rust binary)                       │
+│                                                               │
+│  ┌─────────────────────┐   ┌──────────────────────────────┐  │
+│  │  NSApplication       │   │  CGEventTap                  │  │
+│  │  (menu bar, LSUIEl.) │   │  keyDown listener (HID level)│  │
+│  └──────────┬──────────┘   └──────────────┬───────────────┘  │
+│             │ prompt select                │ hotkey press      │
+│             ▼                             ▼                   │
+│  config/prompts/         ┌────────────────────────────────┐   │
+│  (TOML files)            │  State machine                  │   │
+│                          │  IDLE → RECORDING → PROCESSING  │   │
+│                          │                                 │   │
+│                          │  [cpal audio → WAV → temp file] │   │
+│                          │           │                     │   │
+│                          │           ▼                     │   │
+│                          │  spawn: transcribe.py           │   │
+│                          │           │ (transcript)        │   │
+│                          │           ▼                     │   │
+│                          │  spawn: llm.py (if prompt set)  │   │
+│                          │           │ (full LLM output)   │   │
+│                          │           ▼                     │   │
+│                          │  NSPasteboard ← output text     │   │
+│                          └────────────────────────────────┘   │
+│                                                               │
+│  ~/.config/yaptap/config.toml  (hotkey + prompt selection)   │
+│  ~/.config/yaptap/yaptap.lock  (single-instance guard)       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Directory Layout (phase 3 additions)
+
+```
+YapTap/
+├── assets/
+│   └── icons/
+│       ├── yaptap-idle.png       # menu bar icon — idle state (@1×)
+│       ├── yaptap-idle@2x.png    # menu bar icon — idle state (@2×, Retina)
+│       ├── yaptap-active.png     # menu bar icon — active state (@1×)
+│       └── yaptap-active@2x.png  # menu bar icon — active state (@2×, Retina)
+└── PRD/
+    └── PRD_3.json               # phase 3 task tracking
+```
+
+---
+
+## Dependencies (phase 3 additions)
+
+### Rust
+- [`tray-icon`](https://crates.io/crates/tray-icon) — macOS menu bar icon and native dropdown menu
+- [`rdev`](https://crates.io/crates/rdev) — global keyboard event listener (wraps `CGEventTap` on macOS)
+- [`arboard`](https://crates.io/crates/arboard) — clipboard read/write (`NSPasteboard` on macOS)
