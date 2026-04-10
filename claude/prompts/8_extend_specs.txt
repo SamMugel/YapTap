@@ -1,0 +1,32 @@
+1. study SPECS.md and specs/* to learn about the app specifications                             
+2. study claude/rules/*
+
+You are going to build the specs out for phase 3
+
+running yaptap launches an app
+- the app has an icon in the mac menu bar
+- click the icon to select which prompt to use
+
+hotkey behaviour
+- upon pressing hotkey option + space: start recording
+- press option + space again: stop recording; echo LLM output into the terminal
+
+generate a minimalistic, modern icon. make it a geometric shape
+
+modify specs to specify this
+Ask any clarying questions needed
+
+---
+
+1. yaptap becomes the menu bar app (long-running process)
+2. Copy to clipboard                
+3. the CLI should still work
+4. sticky selection                     
+5. configurable   
+6. Just a description
+
+---
+
+review specs/
+are there any inconsistencies? what about repetitions?
+think carefully

@@ -1,0 +1,36 @@
+0a. study SPECS.md and specs/* to learn about the app specifications
+
+0b. The source code of the compiler is in src/
+
+0c. study claude/rules/*
+
+1. Your task is to implement phase 3 specs using parrallel subagents. Follow the PRD/PRD_3.json and choose the most important 10 things. Before making changes search codebase (don't assume not implemented) using subagents. You may use up to 500 parrallel subagents for all operations but only 1 subagent for build/tests of rust.
+
+2. After implementing functionality or resolving problems, run the tests for that unit of code that was improved. If functionality is missing then it's your job to add it as per the application specifications. Think hard.
+
+2. When you discover a parser, lexer, control flow or LLVM issue. Immediately update PRD/PRD_3.json with your findings using a subagent. When the issue is resolved, update PRD/PRD_3.json and remove the item using a subagent.
+
+3. When the tests pass update the PRD_3.json, then add changed code and @PRD/PRD_3.json with "git add -A" via bash then do a "git commit" with a message that describes the changes you made to the code. After the commit do a "git push" to push the changes to the remote repository.
+
+9999. Important: We want single sources of truth, no migrations/adapters. If tests unrelated to your work fail then it's your job to resolve these tests as part of the increment of change.
+
+999999. As soon as there are no build or test errors create a git tag. If there are no git tags start at 0.0.0 and increment patch by 1 for example 0.0.1  if 0.0.0 does not exist.
+
+999999999. You may add extra logging if required to be able to debug the issues.
+
+9999999999. ALWAYS KEEP @PRD/PRD_3.json up to do date with your learnings using a subagent. Especially after wrapping up/finishing your turn.
+
+99999999999. When you learn something new about how to run the app or examples make sure you update @AGENT.md using a subagent but keep it brief. For example if you run commands multiple times before learning the correct command then that file should be updated.
+
+99999999999999. IMPORTANT when you discover a bug resolve it using subagents even if it is unrelated to the current piece of work after documenting it in @PRD/PRD_3.json
+
+9999999999999999999. Keep AGENT.md up to date with information on how to run the app and your learnings to optimise the build/test loop using a subagent.
+
+
+999999999999999999999. For any bugs you notice, it's important to resolve them or document them in @PRD/PRD_3.json to be resolved using a subagent.
+
+99999999999999999999999999. When @PRD/PRD_3.json becomes large periodically clean out the items that are completed from the file using a subagent.
+
+99999999999999999999999999. If you find inconsistentcies in the specs/* then use the oracle and then update the specs. Specifically around types and lexical tokens.
+
+9999999999999999999999999999999. SUPER IMPORTANT DO NOT IGNORE. DO NOT PLACE STATUS REPORT UPDATES INTO @AGENT.md

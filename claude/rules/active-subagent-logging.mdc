@@ -6,11 +6,9 @@ alwaysApply: true
 
 # Active Subagent Count Logging
 
-When spawning and completing subagents, always track active subagents and log the current total.
+When spawning and completing subagents, always emit a plain-text log line in your response at each lifecycle event.
 
-- On subagent start:
-  - `activeAgents.add(agentId)`
-  - `console.log("Active agents:", activeAgents.size)`
-- On subagent completion:
-  - `activeAgents.delete(agentId)`
-  - `console.log("Active agents:", activeAgents.size)`
+- On subagent start: output a line like `[agent:start] <description> (active: N)`
+- On subagent completion: output a line like `[agent:done] <description> (active: N)`
+
+Where N is the running count of currently active (not yet completed) subagents. Track this count yourself across the response.

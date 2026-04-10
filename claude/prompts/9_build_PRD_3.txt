@@ -1,0 +1,34 @@
+Read rules/ and specs/
+
+You are building PRD_3.json for implementation phase 3. IMPORTANT: ONLY BUILD TASKS FOR PHASE 3 OF ROADMAP.
+
+read PRD_1.json and PRD_2.json carefully. Don't create overlapping tasks.
+
+each task needs an implementation status field: "done" or "to do"  
+
+Make tasks atomic.
+
+----
+
+Read PRD_3.json
+
+is anything missing? Think carefully. Can tasks be made more atomic? Implement recommendations
+
+----
+
+reread phase 3 specs carefully. focus PRD_3.json on building the phase 3 MVP. remove all future coding tasks.
+
+----
+
+Read PRD_1.json and PRD_2.json
+
+remove all tasks from PRD_3.json which have already been done in PRD_1.json and PRD_2.json
+
+The works in phase 3 needs to build on top of phase 1 and phase 2
+
+----
+
+Read PRD_3.json
+
+order tasks. Add dependencies and architectural choices first
+
