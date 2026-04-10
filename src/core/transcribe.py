@@ -59,10 +59,11 @@ def main() -> None:
         description="Transcribe a WAV file using Whisper."
     )
     parser.add_argument("wav_path", help="Path to the WAV file to transcribe.")
+    parser.add_argument("--model", default="base", help="Whisper model name (default: base).")
     args = parser.parse_args()
 
     try:
-        transcript = transcribe(args.wav_path)
+        transcript = transcribe(args.wav_path, model_name=args.model)
         print(transcript)
     except (ValueError, RuntimeError) as e:
         print(f"error: {e}", file=sys.stderr)
