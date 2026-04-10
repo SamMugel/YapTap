@@ -23,7 +23,7 @@
         "Run `cargo clippy -- -D warnings` and confirm no warnings (per rust-style.mdc).",
         "Run `cargo test` and confirm all hotkey unit tests still pass."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I002",
@@ -36,7 +36,7 @@
         "If no tray-icon API exists in any available version, add a `// FIXME(P5-I002): template image requires tray-icon API not available in current version; icon renders as literal bitmap` comment at the former block location (app.rs:530) and close the task. The icons are black-on-transparent; they will be invisible on a dark menu bar until this is resolved.",
         "After whichever outcome is reached, verify in P5-I004."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I004",
@@ -63,7 +63,7 @@
         "Fix: resolve the script path relative to the binary, mirroring the prompts_dir() pattern in config.rs. In transcription.rs, replace the literal `\"src/core/transcribe.py\"` with `std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join(\"../../src/core/transcribe.py\"))).unwrap_or_else(|| PathBuf::from(\"src/core/transcribe.py\"))`. Apply the same fix to llm.rs for `\"src/core/llm.py\"`.",
         "Confirm from a different cwd: run `cd /tmp && /path/to/target/debug/yaptap`, press the hotkey twice, and confirm transcription succeeds."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I007",
@@ -75,7 +75,7 @@
         "Test: press LEFT ⌥Option + Space. Confirm it does switch to active.",
         "Fix: in the `rdev::EventType::KeyPress(key)` handler in app.rs, change the modifier check to treat Alt and AltGr as interchangeable for the 'option' modifier: replace `parsed.modifiers.iter().all(|m| pressed.contains(m))` with a check that also counts AltGr as satisfying an Alt requirement. The simplest implementation: before the all() check, if pressed.contains(&rdev::Key::AltGr), also insert rdev::Key::Alt into a local copy of the pressed set."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I008",
@@ -86,7 +86,7 @@
         "Hold ⌥Space for ~300 ms. Confirm the app transitions directly to Processing (active icon returns to idle) without the user releasing the key.",
         "Fix: add a `main_key_down: bool` flag in the rdev closure, initialised to false. In the KeyPress arm, fire HotkeyPressed only when `!main_key_down && key == parsed.key`, then set main_key_down = true. In the KeyRelease arm, reset main_key_down = false when key == parsed.key. This suppresses auto-repeat without changing any other behavior."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I009",
@@ -97,7 +97,7 @@
         "With another app focused, hold Space then press Option. Confirm yaptap starts recording unexpectedly.",
         "Fix: inside the `rdev::EventType::KeyPress(key)` arm, change the fire condition from `if modifiers_held && pressed.contains(&parsed.key)` to `if modifiers_held && key == parsed.key`. The `key` variable is already bound in the match arm. This is a one-character change that restricts firing to the leading edge of the main key only."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I010",
@@ -123,7 +123,7 @@
         "Run `cargo clippy -- -D warnings` to confirm no new warnings.",
         "Run `RUST_LOG=warn ./target/debug/yaptap` and confirm config warnings appear in the terminal output."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I012",
@@ -136,7 +136,7 @@
         "Re-test with corrupt config — confirm the alert 'Config file is not valid TOML...' appears after the menu bar icon is visible.",
         "Re-test with an invalid hotkey value (e.g. hotkey = \"win+space\") — confirm the alert 'Unknown hotkey...' appears."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I013",
@@ -147,7 +147,7 @@
         "Run `grep -n 'unsafe' src/app.rs` to list all sites.",
         "Add a `// SAFETY:` comment above each unsafe block explaining: (a) Cocoa object pointers are valid because they come from documented AppKit factory methods that never return null for these calls, (b) all msg_send! calls execute on the main thread, (c) the autorelease pool drain is sound because the pool was created on this same thread in this same loop iteration."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I014",
@@ -159,7 +159,7 @@
         "Remove the two corresponding `#[allow(clippy::comparison_to_empty)]` attributes.",
         "Run `cargo clippy -- -D warnings` and confirm clean."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P5-I015",
@@ -171,7 +171,7 @@
         "Replace each with `if let Err(e) = menu.append(...) { tracing::warn!(error = ?e, \"failed to append menu item\"); }` per rust-tracing.mdc structured field convention.",
         "Run `cargo clippy -- -D warnings` and confirm clean."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }
