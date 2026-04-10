@@ -66,6 +66,17 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - macOS (cpal uses CoreAudio)
 - `macOS Accessibility permission` — required for global hotkey (grant in System Settings → Privacy & Security → Accessibility)
 
+## Debugging
+```bash
+# Launch app mode with all tracing output visible in the terminal
+RUST_LOG=debug ./target/debug/yaptap
+
+# Info-level only (state transitions and errors)
+RUST_LOG=info ./target/debug/yaptap
+```
+In app mode, stderr is invisible when launched from Finder or a login item.
+Always launch from a terminal with `RUST_LOG` set when diagnosing issues.
+
 ## Key Notes
 - Python tests mock `whisper.load_model` and `ollama.chat` — no real model needed for tests
 - Rust resamples to 16kHz mono i16 internally (nearest-neighbour) before WAV write

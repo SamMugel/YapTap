@@ -14,14 +14,27 @@ use anyhow::{Context, Result};
 
 /// Resolve the path to `src/core/llm.py` relative to the running binary.
 ///
-/// In app mode the cwd is often not the project root, so we anchor to the
-/// binary's parent directory and walk up to find the script.  Falls back to
-/// the cwd-relative path for development builds.
+/// Tries three candidates in order, returning the first whose parent directory
+/// exists (P6-I007):
+///   1. `<binary>/../../../src/core/llm.py` — dev build at target/debug/ or
+///      target/release/
+///   2. `<binary>/../src/core/llm.py` — bundled install next to the binary
+///   3. `src/core/llm.py` — cwd-relative fallback (project root cwd)
 fn llm_script_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("../../src/core/llm.py")))
-        .unwrap_or_else(|| PathBuf::from("src/core/llm.py"))
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidates = [
+                dir.join("../../src/core/llm.py"),
+                dir.join("src/core/llm.py"),
+            ];
+            for candidate in &candidates {
+                if candidate.parent().map(|p| p.is_dir()).unwrap_or(false) {
+                    return candidate.clone();
+                }
+            }
+        }
+    }
+    PathBuf::from("src/core/llm.py")
 }
 
 /// Run the LLM pipeline, collecting all output.

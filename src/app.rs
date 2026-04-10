@@ -53,6 +53,10 @@ struct SharedState {
     state: Arc<Mutex<AppState>>,
     audio: Arc<Mutex<Option<AudioHandle>>>,
     child: Arc<Mutex<Option<Child>>>,
+    /// Set to true when recording starts, cleared when the pipeline takes the
+    /// AudioHandle.  Guards the on_error closure so spurious post-stop errors
+    /// from a racing cpal callback are silently dropped (P6-I006).
+    recording_active: Arc<AtomicBool>,
 }
 
 impl SharedState {
@@ -62,6 +66,7 @@ impl SharedState {
             state: Arc::new(Mutex::new(AppState::Idle)),
             audio: Arc::new(Mutex::new(None)),
             child: Arc::new(Mutex::new(None)),
+            recording_active: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -637,18 +642,15 @@ pub fn run_app() {
             }
         }
 
-        // ── TrayIconEvent (icon clicked) ──────────────────────────────────────
-        while let Ok(_event) = tray_icon::TrayIconEvent::receiver().try_recv() {
-            // Rebuild the menu so check marks and recording label reflect current state.
-            let prompts = load_prompts();
-            let cur_state = shared.state.lock().unwrap().clone();
-            let (new_menu, new_actions) = build_menu(&prompts, &config, &cur_state);
-            menu_actions = new_actions;
-            tray.set_menu(Some(Box::new(new_menu)));
-        }
-
-        // ── MenuEvent (user chose a menu item) ────────────────────────────────
+        // ── MenuEvent (user chose a menu item) ───────────────────────────────
+        // Drained BEFORE TrayIconEvent so that a menu-item click is dispatched
+        // with the IDs that were live when the menu opened.  TrayIconEvent
+        // rebuilds the menu (replacing all MenuIds); if it ran first, any
+        // pending MenuEvent would look up a stale ID and be silently dropped
+        // (P6-I001 root cause).
         while let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
+            tracing::debug!(menu_id = ?event.id, "MenuEvent received");
+            tracing::debug!(menu_id = ?event.id, found = menu_actions.contains_key(&event.id), "MenuEvent dispatch");
             if let Some(action) = menu_actions.get(&event.id).cloned() {
                 match action {
                     MenuAction::ToggleRecording => {
@@ -679,40 +681,83 @@ pub fn run_app() {
             }
         }
 
+        // ── TrayIconEvent (icon clicked) ──────────────────────────────────────
+        // Drained AFTER MenuEvent so that menu ID lookups above use the IDs
+        // from the currently displayed menu.  Rebuilds the menu to refresh
+        // prompt check marks and the recording label (P6-I001).
+        while let Ok(_event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+            tracing::debug!("TrayIconEvent received");
+            // Rebuild the menu so check marks and recording label reflect current state.
+            let prompts = load_prompts();
+            let cur_state = shared.state.lock().unwrap().clone();
+            let (new_menu, new_actions) = build_menu(&prompts, &config, &cur_state);
+            menu_actions = new_actions;
+            tray.set_menu(Some(Box::new(new_menu)));
+        }
+
         // ── AppEvent (hotkey / pipeline result) ───────────────────────────────
         while let Ok(event) = app_event_rx.try_recv() {
             match event {
                 AppEvent::HotkeyPressed => {
                     let state = shared.state.lock().unwrap().clone();
+                    tracing::info!(state = ?state, "HotkeyPressed");
                     match state {
                         AppState::Idle => {
                             // Start recording.  Pass an error callback so that
                             // cpal stream errors (e.g. device disconnect) are
                             // forwarded to the main event loop as pipeline errors
-                            // (P3-T069).
+                            // (P3-T069).  Guard the closure with recording_active
+                            // so a racing callback after stop does not fire a
+                            // spurious error alert (P6-I006).
                             let err_tx = Arc::clone(&app_event_tx);
+                            let recording_active = Arc::clone(&shared.recording_active);
                             match crate::audio::start_recording(None, move |e| {
-                                let _ = err_tx.send(AppEvent::PipelineDone(Err(
-                                    format!("audio device error: {e}"),
-                                )));
+                                if recording_active.load(Ordering::SeqCst) {
+                                    let _ = err_tx.send(AppEvent::PipelineDone(Err(
+                                        format!("audio device error: {e}"),
+                                    )));
+                                }
                             }) {
                                 Ok(handle) => {
+                                    shared.recording_active.store(true, Ordering::SeqCst);
                                     *shared.audio.lock().unwrap() = Some(handle);
                                     *shared.state.lock().unwrap() = AppState::Recording;
                                     switch_icon(&tray, &AppState::Recording);
+                                    // Sync menu label to "Stop Recording" immediately
+                                    // so it is correct if opened via hotkey (P6-I002).
+                                    rebuild_menu(&tray, &mut menu_actions, &config, &AppState::Recording);
                                 }
                                 Err(e) => {
-                                    show_alert(
-                                        "Recording Error",
-                                        &format!("Failed to start recording: {e}"),
-                                        &["OK"],
-                                    );
+                                    tracing::warn!(error = %e, "start_recording failed");
+                                    // Provide actionable guidance when the error
+                                    // looks like a TCC microphone denial (P6-I004).
+                                    let err_str = e.to_string();
+                                    let msg = if err_str.contains("561015905")
+                                        || err_str.contains("not permitted")
+                                        || err_str.contains("kAudioHardwareNotRunningError")
+                                        || err_str.contains("-536870174")
+                                    {
+                                        "Microphone access is required. Grant it in \
+                                         System Settings \u{2192} Privacy & Security \
+                                         \u{2192} Microphone, then restart YapTap."
+                                            .to_string()
+                                    } else {
+                                        format!("Failed to start recording: {e}")
+                                    };
+                                    show_alert("Recording Error", &msg, &["OK"]);
                                 }
                             }
                         }
                         AppState::Recording => {
+                            // Clear the guard before the pipeline thread takes
+                            // the AudioHandle so the on_error closure stops
+                            // firing if the device disconnects during teardown
+                            // (P6-I006).
+                            shared.recording_active.store(false, Ordering::SeqCst);
                             // Stop recording and kick off the pipeline.
                             *shared.state.lock().unwrap() = AppState::Processing;
+                            // Sync menu label to "Processing…" immediately (P6-I002).
+                            rebuild_menu(&tray, &mut menu_actions, &config, &AppState::Processing);
                             // Icon stays active (orange) during processing.
                             let shared_clone = Arc::clone(&shared);
                             let config_clone = config.clone();
@@ -736,6 +781,8 @@ pub fn run_app() {
                         drop(guard.take());
                     }
                     switch_icon(&tray, &AppState::Idle);
+                    // Sync menu label back to "Start Recording" (P6-I002).
+                    rebuild_menu(&tray, &mut menu_actions, &config, &AppState::Idle);
                     match result {
                         Ok(output) => {
                             match arboard::Clipboard::new()

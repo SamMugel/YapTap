@@ -11,14 +11,27 @@ use anyhow::{Context, Result};
 
 /// Resolve the path to `src/core/transcribe.py` relative to the running binary.
 ///
-/// In app mode the cwd is often not the project root, so we anchor to the
-/// binary's parent directory and walk up to find the script.  Falls back to
-/// the cwd-relative path for development builds.
+/// Tries three candidates in order, returning the first whose parent directory
+/// exists (P6-I007):
+///   1. `<binary>/../../../src/core/transcribe.py` — dev build at target/debug/ or
+///      target/release/
+///   2. `<binary>/../src/core/transcribe.py` — bundled install next to the binary
+///   3. `src/core/transcribe.py` — cwd-relative fallback (project root cwd)
 fn transcribe_script_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("../../src/core/transcribe.py")))
-        .unwrap_or_else(|| PathBuf::from("src/core/transcribe.py"))
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidates = [
+                dir.join("../../src/core/transcribe.py"),
+                dir.join("src/core/transcribe.py"),
+            ];
+            for candidate in &candidates {
+                if candidate.parent().map(|p| p.is_dir()).unwrap_or(false) {
+                    return candidate.clone();
+                }
+            }
+        }
+    }
+    PathBuf::from("src/core/transcribe.py")
 }
 
 /// Run Whisper transcription on `wav_path` using the given `model`.
