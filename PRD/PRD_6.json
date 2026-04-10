@@ -15,7 +15,7 @@
         "Click 'Start Recording' in the menu — confirm the tray icon switches to the active (all-bars-equal) variant.",
         "Click 'Stop Recording' in the menu — confirm the tray icon returns to idle."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I002",
@@ -30,7 +30,7 @@
         "Press ⌥Space to start recording → immediately open the menu → confirm label reads 'Stop Recording'.",
         "Press ⌥Space to stop → wait for pipeline → open menu → confirm label reads 'Start Recording'."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I003",
@@ -45,7 +45,7 @@
         "Run `RUST_LOG=debug ./target/debug/yaptap`, click Start Recording; confirm the log shows MenuEvent received BEFORE TrayIconEvent received (after P6-I001 fix), dispatch found=true, and HotkeyPressed state=Idle.",
         "Run `cargo clippy -- -D warnings` clean."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I004",
@@ -59,7 +59,7 @@
         "Revoke microphone permission in System Settings → Privacy & Security → Microphone for the yaptap binary → click Start Recording → confirm a helpful alert appears.",
         "Re-grant permission → confirm recording starts normally."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I005",
@@ -71,7 +71,7 @@
         "Confirm AGENT.md has no status-report content (per project rules).",
         "Commit the change."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I006",
@@ -85,7 +85,7 @@
         "In the Recording→Processing branch, after spawning the pipeline thread, store a clone of the Arc in shared state (or pass it to the pipeline thread) and set it to false when run_pipeline_inner() takes the AudioHandle.",
         "Run `cargo build` exit 0; run `cargo clippy -- -D warnings` clean; run `cargo test` — 10/10 pass."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I007",
@@ -98,7 +98,7 @@
         "Run `cargo build` exit 0; run `cargo clippy -- -D warnings` clean; run `cargo test` — 10/10 pass.",
         "Verify from a different cwd: `cd /tmp && /path/to/target/debug/yaptap` — trigger a recording cycle — confirm no 'can't open file' error in the pipeline error alert."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P6-I008",
