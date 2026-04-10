@@ -1,0 +1,403 @@
+{
+  "phase": 3,
+  "phase_name": "Menu Bar App + Global Hotkey",
+  "goal": "`yaptap` with no flags launches as a persistent macOS menu bar app. A global hotkey (⌥Space by default) starts and stops recording; the result is placed on the clipboard. Prompt selection is sticky via a menu dropdown.",
+  "scope": {
+    "in_scope": [
+      "Mode detection: no-flags → app mode; any flag → existing CLI pipeline",
+      "Refactor shared audio capture, transcription, and LLM functions callable from both CLI and app mode",
+      "Config file (~/.config/yaptap/config.toml): read/write, hotkey, selected_prompt, whisper_model, llm_model",
+      "Single-instance guard via PID lock file",
+      "NSApplication in LSUIElement mode (no Dock icon)",
+      "Menu bar icon: two-state PNG template images (idle/active), three-bar equalizer design",
+      "Tray-icon dropdown menu: prompt list, No Prompt, hotkey display, Open Config, Quit",
+      "Sticky prompt selection: persisted to config file on each change",
+      "Global hotkey via rdev: configurable key+modifier, Accessibility permission handling",
+      "AppState machine: Idle → Recording → Processing → Idle",
+      "App-mode recording pipeline: audio → transcribe.py → llm.py (buffered) → clipboard",
+      "App-mode error handling: alert dialogs on audio/transcription/LLM failures",
+      "--device <index> CLI flag for explicit audio input device selection",
+      "Phase 3 error handling and exit codes"
+    ],
+    "out_of_scope": [
+      "Cursor injection at caret position (Phase 4)",
+      "System notifications (UNUserNotificationCenter)",
+      "Hotkey configuration via in-app UI",
+      "Windows / Linux support"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "P3-T001",
+      "section": "foundation",
+      "title": "Add tray-icon, rdev, arboard to [dependencies] in Cargo.toml",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T002",
+      "section": "foundation",
+      "title": "At the top of main(): if no CLI flags are present (no prompt, prompt-file, list-prompts, model, llm-model, device), call run_app() and return; otherwise fall through to the existing CLI pipeline",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T003",
+      "section": "foundation",
+      "title": "Create src/audio.rs: extract cpal audio capture from main() into `fn capture_audio(device_index: Option<usize>) -> anyhow::Result<PathBuf>` returning the temp WAV path; update the CLI path in main() to call this function",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T004",
+      "section": "foundation",
+      "title": "Create src/transcription.rs: extract transcription subprocess spawn from main() into `fn run_transcription(wav_path: &Path, model: &str) -> anyhow::Result<String>` returning the transcript; update the CLI path in main() to call this function",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T005",
+      "section": "foundation",
+      "title": "Create src/llm.rs: add `fn run_llm_collect(transcript: &str, prompt_path: &Path, model: &str) -> anyhow::Result<String>` that reads all llm.py stdout into a String buffer and returns it (for app-mode clipboard output); keep the existing byte-streaming logic in main() for CLI mode",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T006",
+      "section": "cli-additions",
+      "title": "Add `--device <index: usize>` optional CLI flag to the existing Args struct; pass the value as Some(index) to capture_audio() in CLI mode",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T007",
+      "section": "config",
+      "title": "Create src/config.rs with `AppConfig` struct: fields hotkey (String), selected_prompt (String), whisper_model (String), llm_model (String); implement Default returning (\"option+space\", \"\", \"base\", \"llama3\")",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T008",
+      "section": "config",
+      "title": "Implement config file path helper in src/config.rs returning `~/.config/yaptap/config.toml` via the dirs crate (dirs::home_dir())",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T009",
+      "section": "config",
+      "title": "Implement AppConfig::load(): create ~/.config/yaptap/ directory if absent, write a default config.toml if absent, then parse the TOML file into AppConfig",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T010",
+      "section": "config",
+      "title": "In AppConfig::load(): on TOML parse error, show a macOS alert \"Config file is not valid TOML: ~/.config/yaptap/config.toml — using defaults.\" and return AppConfig::default()",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T011",
+      "section": "config",
+      "title": "In AppConfig::load(): validate the hotkey field by attempting to parse it; on invalid value, show a macOS alert \"Unknown hotkey '<value>' — using default: option+space.\" and reset the field to \"option+space\" in the returned struct",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T012",
+      "section": "config",
+      "title": "In AppConfig::load(): if selected_prompt is non-empty and no matching <stem>.toml exists in config/prompts/, silently reset it to \"\" in the in-memory struct (do not rewrite the file)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T013",
+      "section": "config",
+      "title": "Implement AppConfig::save_prompt(stem: &str): write config.toml atomically (write full config to ~/.config/yaptap/config.toml.tmp then rename to config.toml), updating only selected_prompt; on write failure, log a warning to stderr and continue",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T014",
+      "section": "single-instance",
+      "title": "On app launch (before NSRunLoop): if ~/.config/yaptap/yaptap.lock exists, read the stored PID and send signal 0 (kill -0); if the process is alive, exit 0 immediately; if dead (ESRCH), continue and overwrite the lock file",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T015",
+      "section": "single-instance",
+      "title": "Write own PID as a decimal string to ~/.config/yaptap/yaptap.lock after the stale-lock check passes",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T016",
+      "section": "single-instance",
+      "title": "Delete ~/.config/yaptap/yaptap.lock on clean exit: in the Quit YapTap handler and in a SIGTERM handler registered via ctrlc",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T017",
+      "section": "app-lifecycle",
+      "title": "Create src/app.rs with `pub fn run_app()` entry point; declare it in main.rs as `mod app`",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T018",
+      "section": "app-lifecycle",
+      "title": "In run_app(): call AppConfig::load() and store the result; perform single-instance lock file check and write",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T019",
+      "section": "app-lifecycle",
+      "title": "In run_app(): initialise NSApplication with activation policy Prohibited (LSUIElement) so no Dock icon or app menu bar appears",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T020",
+      "section": "icon-assets",
+      "title": "Create assets/icons/ directory",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T021",
+      "section": "icon-assets",
+      "title": "Create assets/icons/yaptap-idle.png (18×18px @1×): three filled black rectangles 3px wide with 2px gaps between them, heights left=6px centre=10px right=6px, centred in the 18×18 bounding box, on a transparent background (macOS template image format)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T022",
+      "section": "icon-assets",
+      "title": "Create assets/icons/yaptap-idle@2x.png (36×36px @2×): same idle design at double resolution for Retina displays",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T023",
+      "section": "icon-assets",
+      "title": "Create assets/icons/yaptap-active.png (18×18px @1×): three filled black rectangles 3px wide with 2px gaps, all three bars 10px tall, centred in the 18×18 bounding box, transparent background",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T024",
+      "section": "icon-assets",
+      "title": "Create assets/icons/yaptap-active@2x.png (36×36px @2×): same active design at double resolution for Retina displays",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T025",
+      "section": "menu-bar",
+      "title": "In run_app(): create a tray-icon TrayIcon with the idle PNG loaded from assets/icons/yaptap-idle.png; set it as a template image so macOS adapts it to light and dark menu bar themes",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T026",
+      "section": "menu-bar",
+      "title": "Implement switch_icon(state: &AppState) helper: swap the TrayIcon image between idle and active PNG variants based on the current AppState",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T027",
+      "section": "prompt-menu",
+      "title": "Implement build_menu(config: &AppConfig, prompts_dir: &Path) -> Menu: load all .toml files from config/prompts/ (binary-relative), sorted alphabetically by stem, and add one menu item per file showing the prompt's name field",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T028",
+      "section": "prompt-menu",
+      "title": "In build_menu(): if config/prompts/ is absent or contains no .toml files, add a single disabled \"No prompts found\" item in place of the prompt list",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T029",
+      "section": "prompt-menu",
+      "title": "In build_menu(): add a checkmark to the menu item whose stem matches config.selected_prompt; when selected_prompt is empty, add the checkmark to the \"No Prompt\" item instead",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T030",
+      "section": "prompt-menu",
+      "title": "In build_menu(): add a separator after the prompt list, then a \"No Prompt\" item, then a second separator",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T031",
+      "section": "prompt-menu",
+      "title": "In build_menu(): add a disabled hotkey display item showing the configured hotkey with Unicode modifier symbols (option→⌥, cmd→⌘, ctrl→⌃, shift→⇧, space→Space), e.g. \"Hotkey: ⌥Space\"",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T032",
+      "section": "prompt-menu",
+      "title": "In build_menu(): add an \"Open Config…\" menu item followed by a separator and a \"Quit YapTap\" item",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T033",
+      "section": "prompt-menu",
+      "title": "On \"Open Config…\" click: spawn `open ~/.config/yaptap/config.toml` as a subprocess",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T034",
+      "section": "prompt-menu",
+      "title": "On \"Quit YapTap\" click: kill any in-progress transcription or LLM subprocess, delete temp WAV file if present, delete lock file, then call std::process::exit(0)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T035",
+      "section": "prompt-menu",
+      "title": "On prompt item click: update the in-memory selected_prompt to the clicked stem, call AppConfig::save_prompt(), then rebuild and set the updated menu",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T036",
+      "section": "prompt-menu",
+      "title": "On \"No Prompt\" click: set selected_prompt to \"\", call AppConfig::save_prompt(\"\"), then rebuild and set the updated menu",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T037",
+      "section": "prompt-menu",
+      "title": "Rebuild the menu from disk (call build_menu()) each time the tray icon is clicked, so newly added or removed .toml files are reflected without restarting the app",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T038",
+      "section": "hotkey",
+      "title": "Create src/hotkey.rs: implement `fn parse_hotkey(s: &str) -> anyhow::Result<(rdev::Key, Vec<rdev::Key>)>` that splits a \"modifier+...+key\" config string into a key and a list of required modifier keys",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T039",
+      "section": "hotkey",
+      "title": "Check AXIsProcessTrusted() (via objc/core-foundation bindings) on app launch to determine whether Accessibility permission has been granted",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T040",
+      "section": "hotkey",
+      "title": "If Accessibility permission is absent: show a macOS alert \"YapTap needs Accessibility access to capture the global hotkey. Open System Settings → Privacy & Security → Accessibility?\" with \"Open Settings\" and \"Later\" buttons; on \"Open Settings\" spawn `open \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\"`; skip hotkey registration",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T041",
+      "section": "hotkey",
+      "title": "If Accessibility permission is granted: spawn a background thread calling rdev::listen() that filters events for the parsed hotkey key + modifiers and sends a HotkeyPressed message over an mpsc channel to the main thread",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T042",
+      "section": "hotkey",
+      "title": "If rdev::listen() returns an error: show a one-time alert \"The hotkey '<configured-hotkey>' could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.\" (substitute the actual configured value, e.g. 'option+space')",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T043",
+      "section": "state-machine",
+      "title": "Define `enum AppState { Idle, Recording, Processing }` in src/app.rs; hold the current state in an `Arc<Mutex<AppState>>` shared between the main thread and the hotkey listener thread",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T044",
+      "section": "state-machine",
+      "title": "In the hotkey event handler: when state is Idle, send StartRecording over the mpsc channel; when state is Recording, send StopRecording; when state is Processing, do nothing",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T045",
+      "section": "state-machine",
+      "title": "On StartRecording message: transition state to Recording and call switch_icon(Recording)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T046",
+      "section": "state-machine",
+      "title": "On StopRecording message: transition state to Processing (icon stays Active) and spawn the recording pipeline on a background thread",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T047",
+      "section": "state-machine",
+      "title": "When the pipeline thread completes (success or error): send a PipelineDone message to the main thread; on receipt, transition state to Idle and call switch_icon(Idle)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T048",
+      "section": "recording-pipeline",
+      "title": "In the pipeline thread: stop the in-progress cpal stream, flush the PCM buffer to a temp WAV file using the hound writer from src/audio.rs",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T049",
+      "section": "recording-pipeline",
+      "title": "Call run_transcription(wav_path, &config.whisper_model) from src/transcription.rs to obtain the transcript string; propagate errors to the error-handling path",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T050",
+      "section": "recording-pipeline",
+      "title": "If config.selected_prompt is non-empty: resolve the prompt TOML path as <binary_dir>/config/prompts/<selected_prompt>.toml and call run_llm_collect(transcript, prompt_path, &config.llm_model) from src/llm.rs to obtain the full LLM output string",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T051",
+      "section": "recording-pipeline",
+      "title": "If config.selected_prompt is empty (\"No Prompt\"): use the raw transcript string as the output text, skipping the LLM step",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T052",
+      "section": "recording-pipeline",
+      "title": "Write the output text to the system clipboard via arboard::Clipboard::new()?.set_text(output)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T053",
+      "section": "recording-pipeline",
+      "title": "Delete the temp WAV file after the pipeline completes, whether the pipeline succeeded or failed",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T054",
+      "section": "error-handling",
+      "title": "On audio capture error during recording (cpal stream error or device loss): transition to Idle, delete temp WAV if present, show a macOS alert dialog with the error message",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T055",
+      "section": "error-handling",
+      "title": "On transcription failure in app mode (run_transcription returns Err): transition to Idle, delete temp WAV, show alert \"Transcription failed — <error>\"",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T056",
+      "section": "error-handling",
+      "title": "On LLM failure in app mode (run_llm_collect returns Err): transition to Idle, delete temp WAV if present, show alert \"LLM generation failed — <error>\"",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T057",
+      "section": "error-handling",
+      "title": "On \"Quit YapTap\" or SIGTERM while in Recording or Processing state: kill the in-progress transcription or LLM subprocess handle, delete temp WAV file, remove lock file, then exit 0",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T058",
+      "section": "verification",
+      "title": "Verify cargo build succeeds with Phase 3 dependencies and passes cargo clippy -- -D warnings",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T059",
+      "section": "verification",
+      "title": "Verify `yaptap` with no args shows the menu bar icon in idle state with the correct three-bar design",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T060",
+      "section": "verification",
+      "title": "Verify the menu prompt list matches config/prompts/ sorted alphabetically and the checkmark reflects the persisted selected_prompt",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T061",
+      "section": "verification",
+      "title": "Verify pressing the hotkey once switches the icon to active, pressing again runs the full pipeline, and the clipboard contains the LLM output (or raw transcript if No Prompt)",
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P3-T062",
+      "section": "verification",
+      "title": "Verify `yaptap --prompt email-reply` still records, transcribes, and streams LLM output to stdout (Phase 2 CLI regression check)",
+      "implementation_status": "to do"
+    }
+  ]
+}
