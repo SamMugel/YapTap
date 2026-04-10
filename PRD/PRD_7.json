@@ -1,0 +1,155 @@
+{
+  "phase": 7,
+  "phase_name": "Global Hotkey Does Nothing — Root Cause Diagnosis and Fix",
+  "problem_statement": "After a new `cargo build`, running `yaptap` opens the app and the menu works correctly (clicking 'Start Recording' starts recording), but pressing the global hotkey (⌥Space by default) has no visible effect: no icon change, no recording starts, no error alert appears.",
+  "root_cause_analysis": "The menu-button path (MenuEvent → AppEvent::HotkeyPressed) runs entirely on the main thread and never touches the rdev listener. The hotkey path requires: (1) Accessibility permission granted for the exact binary on disk, (2) rdev::listen() successfully registering a CGEventTap at the HID level, (3) the correct key+modifier combination reaching the tap without being consumed upstream, and (4) AppEvent::HotkeyPressed delivered and processed by the main event loop. A failure in steps 1–3 is completely silent when the app is not launched from a terminal (no stderr visible). The most likely cause after a new build is that macOS requires re-granting Accessibility permission for the updated binary: unsigned binaries are identified by path+code hash and a rebuild changes the hash, voiding prior approval.",
+  "issues": [
+    {
+      "id": "P7-I001",
+      "category": "environment",
+      "title": "Verify Accessibility permission is granted for the post-build binary",
+      "description": "macOS Accessibility access is scoped to the binary identity (path + code hash). Every `cargo build` produces a binary with a different hash. If Accessibility was approved for a prior build, the new binary may require re-approval. The app calls `ax_is_process_trusted()` once at launch (app.rs:496): if it returns false the rdev thread is never spawned, leaving the hotkey silently inactive while the menu button continues to work via the main-thread event channel.",
+      "checks": [
+        "Open System Settings → Privacy & Security → Accessibility.",
+        "Look for the yaptap entry (it will show the path: e.g. target/debug/yaptap or ~/.cargo/bin/yaptap).",
+        "If the entry is absent or unchecked: toggle it ON (or add the binary with the '+' button), then quit and relaunch YapTap.",
+        "Confirm the Accessibility entry matches the binary that is actually being executed (see P7-I004).",
+        "Press ⌥Space after relaunch — confirm the tray icon switches to the active variant."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I002",
+      "category": "observability",
+      "title": "Launch with RUST_LOG=debug to confirm rdev thread starts and listen() does not error",
+      "description": "In normal use, stderr is invisible. The rdev thread logs 'rdev thread spawned' (app.rs:513) before calling rdev::listen(). If listen() fails immediately (e.g. CGEventTap creation denied), it logs 'rdev listen error' and sends AppEvent::HotkeyError. Launching from a terminal with RUST_LOG=debug makes both log lines visible and distinguishes 'thread never started' from 'thread started but tap failed' from 'tap started but events not received'.",
+      "checks": [
+        "From the project root, run: `RUST_LOG=debug ./target/debug/yaptap`",
+        "Confirm the log contains: `DEBUG yaptap::app rdev thread spawned`",
+        "Confirm there is NO subsequent: `ERROR yaptap::app rdev listen error: ...`",
+        "Press ⌥Space and confirm the log contains: `INFO yaptap::app HotkeyPressed state=Idle`",
+        "If 'rdev thread spawned' is absent: Accessibility was denied at launch (see P7-I001).",
+        "If 'rdev listen error' appears: the HotkeyError alert should appear in the UI; investigate the error string.",
+        "If HotkeyPressed never logs: events are not reaching the tap (see P7-I003, P7-I005)."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I003",
+      "category": "environment",
+      "title": "Check for a system keyboard shortcut that intercepts ⌥Space before rdev's event tap",
+      "description": "macOS allows system-level shortcuts (Input Sources switching, Spotlight, Dictation, etc.) to be bound to ⌥Space. Although rdev uses kCGHIDEventTap (the lowest HID level, before input method processing), certain system shortcuts registered via the CGEventTap mechanism at the same or higher level may still consume the event first, depending on the tap's position in the chain. If ⌥Space is bound to 'Select the previous input source', or similar, it may be consumed before reaching YapTap's tap.",
+      "checks": [
+        "Open System Settings → Keyboard → Keyboard Shortcuts → Input Sources.",
+        "Confirm neither 'Select the previous input source' nor 'Select next source in Input menu' is bound to ⌥Space.",
+        "Open System Settings → Keyboard → Keyboard Shortcuts → Spotlight — confirm Spotlight search is not ⌥Space.",
+        "Open System Settings → Keyboard → Keyboard Shortcuts → Services — scan for any ⌥Space binding.",
+        "If any conflict is found: either rebind the system shortcut or change YapTap's hotkey in ~/.config/yaptap/config.toml to a non-conflicting combo (e.g. cmd+shift+y), then restart YapTap.",
+        "Press the hotkey again and confirm P7-I002 log shows HotkeyPressed."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I004",
+      "category": "environment",
+      "title": "Confirm the binary being executed matches the Accessibility-approved binary path",
+      "description": "Accessibility permission is granted per binary path. If the user runs `yaptap` from PATH (e.g. ~/.cargo/bin/yaptap, installed by `cargo install`), but Accessibility was approved for ./target/debug/yaptap (or vice versa), the running binary will fail the AXIsProcessTrusted() check and never spawn the rdev thread. Both the PATH binary and the dev binary appear as separate entries in System Settings → Accessibility.",
+      "checks": [
+        "In the terminal used to launch yaptap, run: `which yaptap` — note the resolved path.",
+        "If launching as `./target/debug/yaptap`, note that path instead.",
+        "Open System Settings → Privacy & Security → Accessibility and confirm the listed entry for YapTap matches the path from the previous step exactly.",
+        "If the paths differ: grant Accessibility to the correct binary and restart YapTap.",
+        "Run `RUST_LOG=debug <correct-binary-path>` and confirm P7-I002 checks pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I005",
+      "category": "bug",
+      "title": "Check lock file is not causing a silent second-instance exit before the hotkey thread starts",
+      "description": "The single-instance guard (app.rs, `ensure_single_instance()`) reads ~/.config/yaptap/yaptap.lock. If the PID stored there is alive (`kill -0 <pid>` succeeds), the new process exits 0 immediately — before the rdev thread is ever spawned. This could happen if: (a) a previous yaptap is still running in the background but invisible, or (b) the old PID was recycled by an unrelated process after a crash. In case (b) the user sees yaptap 'launch' (the command returns 0) but no menu bar icon appears, so this is distinguishable from the reported symptom. Included for completeness as it can cause the hotkey to never be registered in a fresh session.",
+      "checks": [
+        "Run: `cat ~/.config/yaptap/yaptap.lock`",
+        "If the file exists, run: `kill -0 <pid>` with the stored PID.",
+        "If kill -0 succeeds and a yaptap process is visible in Activity Monitor → confirm whether it is the intended instance (has the tray icon). If yes, the hotkey issue is in the running instance, not a second launch.",
+        "If kill -0 fails (stale lock): `rm ~/.config/yaptap/yaptap.lock` then relaunch yaptap.",
+        "After relaunch confirm the tray icon appears and P7-I002 checks pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I006",
+      "category": "bug",
+      "title": "Accessibility alert missing 'restart required' instruction — user may grant permission but not relaunch",
+      "description": "When AXIsProcessTrusted() returns false, the alert shown (app.rs:497-506) reads: 'YapTap needs Accessibility access to capture the global hotkey. Open System Settings → Privacy & Security → Accessibility?' The alert offers 'Open Settings' / 'Later', but neither the alert text nor any follow-up tells the user to quit and relaunch YapTap after granting. The spec (hotkey.md) explicitly states: 'Re-launch the app after granting permission to activate the hotkey.' A user who grants permission and returns to the running app will find the hotkey still inactive — because the rdev thread was never spawned at launch and is not re-attempted. Fix: append the restart instruction to the alert body.",
+      "checks": [
+        "Revoke Accessibility for yaptap in System Settings, then launch yaptap.",
+        "Confirm an Accessibility alert appears.",
+        "Confirm the alert body contains text instructing the user to quit and relaunch YapTap after granting permission (e.g. 'After granting permission, quit and relaunch YapTap.').",
+        "In app.rs, update the alert message string at the show_alert() call near line 499 to include: '\\n\\nAfter granting permission, quit and relaunch YapTap to activate the hotkey.'",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Re-run the alert scenario and confirm the updated text appears."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I007",
+      "category": "bug",
+      "title": "main_key_down flag can get stuck true after a missed KeyRelease, permanently suppressing the hotkey",
+      "description": "The rdev thread tracks `main_key_down: bool` to suppress key-repeat events (P5-I008). It is set true on the first KeyPress(Space) when modifiers are satisfied, and cleared on KeyRelease(Space). If the KeyRelease event is missed — for example, the user presses ⌥Space while switching apps, during a menu modal loop, or during system sleep/wake — `main_key_down` stays true for the remainder of the session. Every subsequent ⌥Space press fails the `!main_key_down` guard (app.rs:541) and is silently dropped. There is no timeout, reset on focus change, or any other recovery path. Fix: reset main_key_down when the pressed set becomes empty (all keys released), which is a reliable proxy for 'no key is physically held'.",
+      "checks": [
+        "In the rdev listen closure (app.rs:521-554), locate the KeyRelease branch.",
+        "After `pressed.remove(&key)`, add: `if pressed.is_empty() { main_key_down = false; }`",
+        "This ensures that when every key is released (regardless of which release event was missed), main_key_down is reset.",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Test: press ⌥Space (starts recording) → while Space is held, open the tray menu (the modal loop may swallow the KeyRelease) → release → press ⌥Space again → confirm icon responds (stops recording).",
+        "Alternatively: press ⌥Space → before releasing, switch to another app → release → switch back → press ⌥Space → confirm the hotkey fires."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I008",
+      "category": "bug",
+      "title": "app.rs parse_hotkey Err branch is silent — no alert, hotkey silently disabled",
+      "description": "app.rs:508 calls `parse_hotkey(&config.hotkey)` a second time (after config.rs already validated it). The Err branch at line 565-567 only emits `tracing::error!` — no UI alert, no fallback. In practice config.rs resets an invalid hotkey to 'option+space' (which always parses), so this path cannot be reached with the current config-load logic. However: (1) it is a latent silent-failure path, (2) the spec (hotkey.md) says to show an alert when the hotkey cannot be registered, and (3) if config.rs validation logic ever changes this becomes a user-invisible regression. Fix: call show_alert() in the Err branch.",
+      "checks": [
+        "In app.rs, locate the `Err(e) =>` branch after `match crate::hotkey::parse_hotkey(&config.hotkey)` (around line 565).",
+        "Add a `show_alert()` call with a message such as: \"Could not parse hotkey '{}': {}. The global hotkey is disabled. Edit ~/.config/yaptap/config.toml to fix the hotkey, then restart YapTap.\"",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "To verify: temporarily inject a known-bad hotkey value into config after it has been loaded in app.rs (patch for test only) and confirm the alert appears on launch.",
+        "Remove the test patch."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I009",
+      "category": "observability",
+      "title": "Add tracing::info! for successful rdev::listen() startup confirmation",
+      "description": "Currently the rdev thread logs 'rdev thread spawned' before calling rdev::listen(), but rdev::listen() blocks indefinitely on success and never returns until an error. There is no log confirming that the CGEventTap was successfully registered and is actively listening. Adding a log line inside the callback (fired on the very first event of any type) would provide evidence that the tap is live. Alternatively, a secondary approach is to log at DEBUG immediately after rdev::listen() is entered by checking the first callback invocation.",
+      "checks": [
+        "Inside the rdev::listen() callback closure (app.rs:521), add a one-shot log using a `std::sync::Once`: `static LISTEN_STARTED: std::sync::Once = std::sync::Once::new(); LISTEN_STARTED.call_once(|| tracing::info!(\"rdev event tap active — receiving events\"));`",
+        "Run `RUST_LOG=info ./target/debug/yaptap`, move the mouse or press any key (any event triggers the callback), confirm the log line appears.",
+        "This confirms the CGEventTap is live even before ⌥Space is pressed.",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I010",
+      "category": "verification",
+      "title": "End-to-end smoke test: ⌥Space starts recording, second ⌥Space stops and places transcript on clipboard",
+      "description": "After P7-I001 through P7-I009 are resolved (or confirmed not applicable), run a full end-to-end verification that the global hotkey path works correctly from keypress to clipboard output.",
+      "checks": [
+        "Run `RUST_LOG=info ./target/debug/yaptap` from the project root.",
+        "Confirm the tray icon appears (idle variant).",
+        "Press ⌥Space — confirm the tray icon switches to the active variant AND the log shows 'HotkeyPressed state=Idle'.",
+        "Speak a short phrase (~2 seconds).",
+        "Press ⌥Space again — confirm the icon stays active (Processing) AND the log shows 'HotkeyPressed state=Recording'.",
+        "Wait for the pipeline to complete — confirm the icon returns to idle and no error alert appears.",
+        "Open any text field → ⌘V → confirm the transcribed (and optionally LLM-processed) text is pasted.",
+        "Click Quit YapTap → confirm the process exits and `ls ~/.config/yaptap/yaptap.lock` returns 'No such file'."
+      ],
+      "status": "to do"
+    }
+  ]
+}
