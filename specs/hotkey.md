@@ -95,10 +95,15 @@ If `CGEventTap` fails to register (e.g. permission denied or system-level confli
 
 ## Configuration
 
-The hotkey is read once at launch from `~/.config/yaptap/config.toml`:
+The hotkey is read from `~/.config/yaptap/config.toml` at launch:
 
 ```toml
 hotkey = "option+space"
 ```
 
-See [config.md](config.md) for the full key-name syntax and how to change the hotkey.
+It can be changed in two ways:
+
+1. **In-app dialog** (preferred): click the `Hotkey: ⌥Space` menu item. The new value takes effect immediately without restarting the app and is written atomically to the config file.
+2. **File edit**: open `~/.config/yaptap/config.toml` (via **Open Config…** or directly), change the `hotkey` field, save, then quit and relaunch YapTap.
+
+See [config.md](config.md) for the full key-name syntax.

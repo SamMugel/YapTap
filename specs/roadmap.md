@@ -55,11 +55,11 @@ Detailed specs: [menubar.md](menubar.md), [hotkey.md](hotkey.md), [config.md](co
 - Single-instance guard via lock file (`~/.config/yaptap/yaptap.lock`).
 - Accessibility permission prompt on first launch if not already granted.
 - CLI modes (`--prompt`, `--list-prompts`, `--device`, etc.) continue to work exactly as in Phase 2.
+- In-app hotkey configuration: clicking the Hotkey menu item opens an input dialog; the new hotkey takes effect immediately without restarting the app and is persisted to the config file.
 
 ### Out of scope for Phase 3
 - Cursor injection at current caret position (Phase 4).
 - System notifications.
-- Hotkey configuration via an in-app UI (config file is edited directly).
 
 ---
 

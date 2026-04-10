@@ -82,11 +82,12 @@ All tokens are lowercase. The key must be the last token.
 |---|---|---|
 | Read | On launch | Rust app |
 | Write (`selected_prompt`) | When user picks a prompt from the menu | Rust app (atomic write) |
-| Write (`hotkey`, `whisper_model`, `llm_model`) | Never — user edits the file directly | — |
+| Write (`hotkey`) | When user changes hotkey via in-app dialog | Rust app (atomic write) |
+| Write (`whisper_model`, `llm_model`) | Never — user edits the file directly | — |
 
 **Atomic write:** the app writes to `~/.config/yaptap/config.toml.tmp`, then renames it to `config.toml`. This prevents a corrupted file on crash during write.
 
-**Restart required for:** `hotkey`, `whisper_model`, `llm_model`. After editing these fields, quit and re-launch YapTap. `selected_prompt` changes made by hand are overwritten the next time the user picks from the menu.
+**Restart required for:** `whisper_model`, `llm_model`. After editing these fields in the file, quit and re-launch YapTap. `hotkey` changes made via the in-app dialog take effect immediately; changes made by hand in the file require a restart. `selected_prompt` changes made by hand are overwritten the next time the user picks from the menu.
 
 ---
 

@@ -78,7 +78,7 @@ Clicking the menu bar icon opens a dropdown:
    ─────────────────────────
    No Prompt
    ─────────────────────────
-   Hotkey: ⌥Space            ← disabled display item
+   Hotkey: ⌥Space            ← click to change
    Open Config…
    ─────────────────────────
    Quit YapTap
@@ -87,9 +87,19 @@ Clicking the menu bar icon opens a dropdown:
 - Prompt entries are loaded from `config/prompts/` at launch and refreshed each time the menu is opened, sorted alphabetically by filename stem (matching `--list-prompts` output order).
 - The currently selected prompt has a checkmark (✓). Only one item is checked at a time.
 - **No Prompt** puts the raw transcript on the clipboard with no LLM step.
-- The hotkey display item is non-interactive; it shows the currently configured hotkey.
-- **Open Config…** opens `~/.config/yaptap/config.toml` in the default text editor via `open`. Changes to `hotkey` require restarting YapTap to take effect; changes to `selected_prompt` or model fields are overwritten by the app the next time the user picks from the menu.
+- The hotkey display item shows the currently configured hotkey. Clicking it opens a hotkey-change dialog (see Hotkey Selection below).
+- **Open Config…** opens `~/.config/yaptap/config.toml` in the default text editor via `open`. Changes to `whisper_model` or `llm_model` require restarting YapTap to take effect. Changes to `hotkey` made directly in the file require a restart; use the in-app hotkey dialog for immediate effect. Changes to `selected_prompt` made by hand are overwritten the next time the user picks from the menu.
 - **Quit YapTap** kills any in-progress subprocess, deletes temp files, removes the lock file, and exits 0.
+
+### Hotkey Selection
+
+Clicking the Hotkey menu item opens an input dialog pre-filled with the current hotkey string (e.g. `option+space`). The user edits the string and clicks OK. The app validates the input with the same parser used at launch (see [config.md](config.md) for the key-name syntax). On valid input:
+
+1. The rdev listener updates its target combo immediately — no restart required.
+2. The new value is written atomically to `~/.config/yaptap/config.toml` (write to `.tmp`, then rename).
+3. The menu label updates to reflect the new hotkey (e.g. `Hotkey: ⌘⇧Y`).
+
+On invalid input: an error alert is shown and the old hotkey remains active. Clicking Cancel makes no change.
 
 ### Prompt Selection Persistence
 
