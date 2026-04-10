@@ -61,10 +61,15 @@ fn push_mono(buf: &Arc<Mutex<Vec<i16>>>, mono: i16) {
 ///
 /// * `device_index` — if `Some(idx)`, selects the `idx`-th device returned by
 ///   `host.input_devices()`; otherwise uses the system default.
+/// * `on_error` — callback invoked on cpal stream errors (e.g. device disconnect).
+///   Receives the error message as a `String`.
 ///
 /// Returns an [`AudioHandle`] without blocking.  The cpal callback runs on a
 /// background thread managed by cpal.
-pub fn start_recording(device_index: Option<usize>) -> Result<AudioHandle> {
+pub fn start_recording(
+    device_index: Option<usize>,
+    on_error: impl Fn(String) + Send + Sync + 'static,
+) -> Result<AudioHandle> {
     let host = cpal::default_host();
 
     // ── 1. Select device ──────────────────────────────────────────────────────
@@ -124,16 +129,20 @@ pub fn start_recording(device_index: Option<usize>) -> Result<AudioHandle> {
     // ── 3. Shared PCM buffer ──────────────────────────────────────────────────
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
 
-    let err_fn = |e: cpal::StreamError| {
-        tracing::error!("cpal stream error: {}", e);
-    };
-
     let config: cpal::StreamConfig = stream_config.config();
+
+    // Wrap the error callback in Arc so we can clone it into each match arm.
+    let on_error = Arc::new(on_error);
 
     // ── 4. Build stream — one arm per sample format ───────────────────────────
     let stream = match sample_format {
         SampleFormat::I16 => {
             let buf = Arc::clone(&samples);
+            let on_error = Arc::clone(&on_error);
+            let err_fn = move |e: cpal::StreamError| {
+                tracing::error!("cpal stream error: {}", e);
+                on_error(e.to_string());
+            };
             device.build_input_stream(
                 &config,
                 move |data: &[i16], _| {
@@ -150,6 +159,11 @@ pub fn start_recording(device_index: Option<usize>) -> Result<AudioHandle> {
         }
         SampleFormat::F32 => {
             let buf = Arc::clone(&samples);
+            let on_error = Arc::clone(&on_error);
+            let err_fn = move |e: cpal::StreamError| {
+                tracing::error!("cpal stream error: {}", e);
+                on_error(e.to_string());
+            };
             device.build_input_stream(
                 &config,
                 move |data: &[f32], _| {
@@ -165,6 +179,11 @@ pub fn start_recording(device_index: Option<usize>) -> Result<AudioHandle> {
         }
         SampleFormat::U16 => {
             let buf = Arc::clone(&samples);
+            let on_error = Arc::clone(&on_error);
+            let err_fn = move |e: cpal::StreamError| {
+                tracing::error!("cpal stream error: {}", e);
+                on_error(e.to_string());
+            };
             device.build_input_stream(
                 &config,
                 move |data: &[u16], _| {

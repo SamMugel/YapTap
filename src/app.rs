@@ -553,8 +553,16 @@ pub fn run_app() {
                     let state = shared.state.lock().unwrap().clone();
                     match state {
                         AppState::Idle => {
-                            // Start recording.
-                            match crate::audio::start_recording(None) {
+                            // Start recording.  Pass an error callback so that
+                            // cpal stream errors (e.g. device disconnect) are
+                            // forwarded to the main event loop as pipeline errors
+                            // (P3-T069).
+                            let err_tx = Arc::clone(&app_event_tx);
+                            match crate::audio::start_recording(None, move |e| {
+                                let _ = err_tx.send(AppEvent::PipelineDone(Err(
+                                    format!("audio device error: {e}"),
+                                )));
+                            }) {
                                 Ok(handle) => {
                                     *shared.audio.lock().unwrap() = Some(handle);
                                     *shared.state.lock().unwrap() = AppState::Recording;
@@ -588,6 +596,12 @@ pub fn run_app() {
 
                 AppEvent::PipelineDone(result) => {
                     *shared.state.lock().unwrap() = AppState::Idle;
+                    // Drop any lingering AudioHandle.  Under normal operation the
+                    // pipeline thread already took it; under a stream error it may
+                    // still be in shared.audio and should be released now.
+                    if let Ok(mut guard) = shared.audio.lock() {
+                        drop(guard.take());
+                    }
                     switch_icon(&tray, &AppState::Idle);
                     match result {
                         Ok(output) => {
