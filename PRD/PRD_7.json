@@ -16,7 +16,7 @@
         "If the entry is absent or unchecked: toggle it ON (or add the binary with the '+' button), quit YapTap, relaunch it.",
         "Press ⌥Space after relaunch — confirm the tray icon switches to the active variant."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I002",
@@ -32,7 +32,7 @@
         "If 'rdev listen error' appears: the HotkeyError alert should appear in the UI; investigate the error string.",
         "If HotkeyPressed never logs: events are not reaching the tap (see P7-I003, P7-I005)."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I003",
@@ -47,7 +47,7 @@
         "If any conflict is found: either rebind the system shortcut or change YapTap's hotkey in ~/.config/yaptap/config.toml to a non-conflicting combo (e.g. cmd+shift+y), then restart YapTap.",
         "Press the hotkey again and confirm P7-I002 log shows HotkeyPressed."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I006",
@@ -62,7 +62,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Re-run the alert scenario and confirm the updated text appears."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I007",
@@ -77,7 +77,7 @@
         "Test: press ⌥Space (starts recording) → while Space is held, open the tray menu (the modal loop may swallow the KeyRelease) → release → press ⌥Space again → confirm icon responds (stops recording).",
         "Alternatively: press ⌥Space → before releasing, switch to another app → release → switch back → press ⌥Space → confirm the hotkey fires."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I009",
@@ -91,7 +91,7 @@
         "Run `RUST_LOG=info ./target/debug/yaptap`, move the mouse or press any key — confirm log contains 'rdev event tap active'.",
         "This confirms the tap is live. If this line never appears, the callback is never being called despite rdev::listen() not returning an error (indicates a silent CGEventTap registration failure)."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I010",
@@ -108,7 +108,7 @@
         "Open any text field → ⌘V → confirm the transcribed (and optionally LLM-processed) text is pasted.",
         "Click Quit YapTap → confirm the process exits and `ls ~/.config/yaptap/yaptap.lock` returns 'No such file'."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I011",
@@ -125,7 +125,7 @@
         "Press ⌥Space — confirm nothing happens (old hotkey is no longer registered).",
         "Restore `hotkey = \"option+space\"` in the config file, quit and relaunch to leave the app in the default state."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I012",
@@ -140,7 +140,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean; `cargo test` — all pass.",
         "Manually verify existing ⌥Space behaviour is unchanged: press hotkey → icon switches to active."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I013",
@@ -152,7 +152,7 @@
         "The method clones self, sets `clone.hotkey = hotkey.to_string()`, serialises with toml::to_string_pretty, writes to .tmp, renames to config.toml (EXDEV fallback identical to save_prompt).",
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean; `cargo test` — all pass."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P7-I014",
@@ -173,7 +173,7 @@
         "Click Cancel → no change.",
         "Relaunch the app → confirm the new hotkey persists (was saved to config.toml)."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }
