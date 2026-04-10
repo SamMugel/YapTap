@@ -92,7 +92,7 @@ impl AppConfig {
                     }
                 }
                 Err(e) => {
-                    eprintln!("warning: could not serialise default config: {}", e);
+                    eprintln!("warning: could not serialise default config: {e}");
                 }
             }
             return default_cfg;
@@ -165,7 +165,7 @@ impl AppConfig {
         let contents = match toml::to_string_pretty(&updated) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("warning: could not serialise config: {}", e);
+                eprintln!("warning: could not serialise config: {e}");
                 return Ok(());
             }
         };

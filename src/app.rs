@@ -1,4 +1,5 @@
-/// YapTap — Phase 3 menu-bar application (P3-T067 through P3-T080)
+#![allow(unexpected_cfgs)]
+// YapTap — Phase 3 menu-bar application
 ///
 /// Owns the NSApplication lifecycle, tray icon, menu, global hotkey listener,
 /// and the record → transcribe → LLM → clipboard pipeline.
@@ -39,6 +40,7 @@ enum AppState {
     Processing,
 }
 
+#[allow(clippy::arc_with_non_send_sync)]
 struct SharedState {
     state: Arc<Mutex<AppState>>,
     audio: Arc<Mutex<Option<AudioHandle>>>,
@@ -46,6 +48,7 @@ struct SharedState {
 }
 
 impl SharedState {
+    #[allow(clippy::arc_with_non_send_sync)]
     fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(AppState::Idle)),
@@ -103,13 +106,13 @@ pub fn show_alert(_title: &str, message: &str, buttons: &[&str]) -> usize {
         let msg_cstr = CString::new(message).unwrap_or_default();
         let msg_ns: id = msg_send![objc::class!(NSString), alloc];
         let msg_ns: id = msg_send![msg_ns, initWithUTF8String: msg_cstr.as_ptr()];
-        let _: () = msg_send![alert, setMessageText: msg_ns];
+        let () = msg_send![alert, setMessageText: msg_ns];
 
         for btn in buttons {
             let btn_cstr = CString::new(*btn).unwrap_or_default();
             let btn_ns: id = msg_send![objc::class!(NSString), alloc];
             let btn_ns: id = msg_send![btn_ns, initWithUTF8String: btn_cstr.as_ptr()];
-            let _: () = msg_send![alert, addButtonWithTitle: btn_ns];
+            let () = msg_send![alert, addButtonWithTitle: btn_ns];
         }
 
         let response: isize = msg_send![alert, runModal];
@@ -447,7 +450,7 @@ pub fn run_app() {
                         }
                     });
                     if let Err(e) = result {
-                        eprintln!("rdev listen error: {:?}", e);
+                        eprintln!("rdev listen error: {e:?}");
                     }
                 });
             }
@@ -485,7 +488,7 @@ pub fn run_app() {
             let prompts = load_prompts();
             let (new_menu, new_actions) = build_menu(&prompts, &config);
             menu_actions = new_actions;
-            let _ = tray.set_menu(Some(Box::new(new_menu)));
+            tray.set_menu(Some(Box::new(new_menu)));
         }
 
         // ── MenuEvent (user chose a menu item) ────────────────────────────────
@@ -531,7 +534,7 @@ pub fn run_app() {
                                 Err(e) => {
                                     show_alert(
                                         "Recording Error",
-                                        &format!("Failed to start recording: {}", e),
+                                        &format!("Failed to start recording: {e}"),
                                         &["OK"],
                                     );
                                 }
@@ -566,7 +569,7 @@ pub fn run_app() {
                                 Err(e) => {
                                     show_alert(
                                         "Clipboard Error",
-                                        &format!("Failed to copy to clipboard: {}", e),
+                                        &format!("Failed to copy to clipboard: {e}"),
                                         &["OK"],
                                     );
                                 }
@@ -592,5 +595,5 @@ fn rebuild_menu(
     let prompts = load_prompts();
     let (new_menu, new_actions) = build_menu(&prompts, config);
     *menu_actions = new_actions;
-    let _ = tray.set_menu(Some(Box::new(new_menu)));
+    tray.set_menu(Some(Box::new(new_menu)));
 }

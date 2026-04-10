@@ -33,12 +33,12 @@ pub fn parse_hotkey(s: &str) -> anyhow::Result<ParsedHotkey> {
     let mut modifiers = Vec::with_capacity(modifier_tokens.len());
     for &tok in modifier_tokens {
         let modifier = parse_modifier(tok)
-            .ok_or_else(|| anyhow!("unrecognised modifier: {:?}", tok))?;
+            .ok_or_else(|| anyhow!("unrecognised modifier: {tok:?}"))?;
         modifiers.push(modifier);
     }
 
     let key = parse_key(key_token)
-        .ok_or_else(|| anyhow!("unrecognised key: {:?}", key_token))?;
+        .ok_or_else(|| anyhow!("unrecognised key: {key_token:?}"))?;
 
     Ok(ParsedHotkey { modifiers, key })
 }

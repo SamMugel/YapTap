@@ -33,6 +33,7 @@ pub struct AudioHandle {
     /// Shared PCM buffer populated by the capture callback (mono i16).
     pub samples: Arc<Mutex<Vec<i16>>>,
     /// The sample format the device actually opened (for informational use).
+    #[allow(dead_code)]
     pub sample_format: cpal::SampleFormat,
     /// Actual sample rate negotiated with the device.
     pub actual_rate: u32,
@@ -179,7 +180,7 @@ pub fn start_recording(device_index: Option<usize>) -> Result<AudioHandle> {
             )
         }
         other => {
-            anyhow::bail!("unsupported sample format: {:?}", other);
+            anyhow::bail!("unsupported sample format: {other:?}");
         }
     }
     .context("while building cpal input stream")?;

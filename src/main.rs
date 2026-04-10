@@ -1,9 +1,9 @@
-/// YapTap — Phase 3 CLI voice transcription + LLM pipeline entry point.
-///
-/// Records microphone audio, writes a temporary WAV file, delegates
-/// transcription to `python3 src/core/transcribe.py <wav_path>`, and
-/// optionally pipes the transcript through an LLM via `python3 src/core/llm.py`.
-/// When invoked with no flags, launches the menu-bar app via `app::run_app()`.
+// YapTap — Phase 3 CLI voice transcription + LLM pipeline entry point.
+//
+// Records microphone audio, writes a temporary WAV file, delegates
+// transcription to `python3 src/core/transcribe.py <wav_path>`, and
+// optionally pipes the transcript through an LLM via `python3 src/core/llm.py`.
+// When invoked with no flags, launches the menu-bar app via `app::run_app()`.
 
 // Required so that objc's `msg_send!` macro (which expands to `sel!`) is
 // available in all modules, including `app.rs`.
