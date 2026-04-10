@@ -2,7 +2,7 @@
   "phase": 4,
   "phase_name": "Hotkey Debugging & Spec Hardening",
   "problem_statement": "Menu bar opens correctly (tray icon visible, dropdown works) but the global hotkey (⌥Space by default) does not trigger recording.",
-  "note": "All issues were identified by cross-referencing specs/, src/, and PRD_3.json. 'checks' are diagnostic steps to confirm the issue. 'status: to do' means unconfirmed at runtime or fix not applied; 'status: done' means code review confirms the item is correctly implemented and no action is needed.",
+  "note": "All issues were identified by cross-referencing specs/, src/, and PRD_3.json. 'checks' are diagnostic steps to confirm the issue. 'status: to do' means unconfirmed at runtime or fix not applied; 'status: done' means code review confirms the item is correctly implemented and no action is needed. Cleanup pass 2026-04-10: P4-I004 removed (HotkeyError + show_alert fully implemented in Phase 3); P4-I015 removed (cpal on_error callback sends PipelineDone(Err) per P3-T069); P4-I016 removed (P3-T024 doc correction applied in Phase 3); P4-I017 removed (main.rs CLI path uses audio::start_recording(), no inline duplicate). P4-I014, P4-I022, P4-I026 updated to match current code state.",
   "issues": [
     {
       "id": "P4-I001",
@@ -38,18 +38,6 @@
       "checks": [
         "Confirm the user quit and re-launched after granting permission, not just switched back to the app.",
         "To confirm the rdev thread is alive: add `tracing::info!(\"rdev thread spawned\")` at src/app.rs:438 and check Console.app after launch."
-      ],
-      "status": "to do"
-    },
-    {
-      "id": "P4-I004",
-      "category": "rdev",
-      "title": "rdev::listen() error is only logged to stderr — no UI alert is shown (P3-T052 partial)",
-      "description": "If rdev::listen() returns an error (e.g. CGEventTapCreate failed due to permission denial or OS rejection), src/app.rs:456–459 calls eprintln! only. The spec (hotkey.md, P3-T052) requires show_alert() with the message 'The hotkey <configured-hotkey> could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.' Without the alert, the user sees a functional menu but a permanently inactive hotkey with no explanation. Note: show_alert() must be called from the main thread; the rdev thread must relay the error via the AppEvent channel rather than calling show_alert() directly.",
-      "checks": [
-        "Open Console.app, filter by process 'yaptap', and look for a 'rdev listen error' message on launch.",
-        "Implement the fix: add an AppEvent::HotkeyError(String) variant to the AppEvent enum; in the rdev thread's error branch send AppEvent::HotkeyError(e.to_string()); in the main loop match arm call show_alert() with the spec-required message.",
-        "Verify the alert appears when the binary is launched without Accessibility permission."
       ],
       "status": "to do"
     },
@@ -159,44 +147,10 @@
       "id": "P4-I014",
       "category": "spec-compliance",
       "title": "AppConfig::load() uses eprintln! for user-facing config errors instead of show_alert() (P3-T017, P3-T018)",
-      "description": "The spec (config.md, P3-T017/18) requires show_alert() dialogs when the config TOML fails to parse or the hotkey value is invalid. src/config.rs:114–133 uses eprintln! only. In app mode, stderr is invisible to the user. The hotkey silently resets to 'option+space' with no notification. Note: AppConfig::load() is called before NSApplication is fully initialised (before finishLaunching), so show_alert() cannot be called from within load() itself. Fix: return parse/validation warnings alongside the config struct (e.g. a Vec<String> of deferred messages), then show_alert() for each in run_app() after finishLaunching.",
+      "description": "The spec (config.md, P3-T017/18) requires show_alert() dialogs when the config TOML fails to parse or the hotkey value is invalid. src/config.rs uses eprintln! for all config errors; the load() doc comment reads 'the caller should show a UI alert if desired' — meaning the deferred-alert contract was intended but no call site fulfils it. In app mode, stderr is invisible to the user. The hotkey silently resets to 'option+space' with no notification. Note: AppConfig::load() is called before NSApplication is fully initialised (before finishLaunching), so show_alert() cannot be called from within load() itself. Fix: change AppConfig::load() to return a (AppConfig, Vec<String>) tuple (or a wrapper struct) carrying deferred warning messages; in run_app(), after finishLaunching, iterate the warnings and call show_alert() for each.",
       "checks": [
-        "Introduce a syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears.",
-        "Implement the deferred-alert pattern described above and re-test."
-      ],
-      "status": "to do"
-    },
-    {
-      "id": "P4-I015",
-      "category": "spec-compliance",
-      "title": "P3-T069 partial: cpal stream error callback does not send AppEvent::PipelineDone(Err) — app stays in Recording state",
-      "description": "The spec requires that when the cpal stream error callback fires (audio device lost, driver crash, etc.), the app transitions to Idle and shows an alert. src/audio.rs:127–129 calls tracing::error! only. No AppEvent is sent to the main loop, so the state machine stays in Recording indefinitely. Fix: pass a Sender<AppEvent> into start_recording(); in the error callback send AppEvent::PipelineDone(Err(format!(\"audio device error: {e}\"))).",
-      "checks": [
-        "Simulate a device loss (unplug a USB mic or disable the device in Audio MIDI Setup) while recording.",
-        "Confirm the icon does NOT return to Idle and no alert appears — reproducing the bug.",
-        "After the fix, repeat the test and confirm the icon returns to Idle with an error alert."
-      ],
-      "status": "to do"
-    },
-    {
-      "id": "P4-I016",
-      "category": "spec-compliance",
-      "title": "P3-T024 task title says NSApplicationActivationPolicyProhibited but correct policy is Accessory — update PRD_3.json",
-      "description": "The title of P3-T024 in PRD_3.json says 'set the NSApplication activation policy to NSApplicationActivationPolicyProhibited'. The code in src/app.rs:395 correctly uses policy 1 (Accessory), as the comment explains: Prohibited (2) prevents all UI event processing and would break the menu. The implementation is correct per menubar.md. The PRD_3 task title is misleading and should be corrected to prevent future confusion.",
-      "checks": [
-        "Edit PRD_3.json P3-T024 title to: 'In run_app(): set the NSApplication activation policy to NSApplicationActivationPolicyAccessory (1) via the cocoa crate so no Dock icon appears but menu-bar clicks are still processed'.",
-        "Confirm the app still launches with no Dock icon and a working menu after the documentation-only change."
-      ],
-      "status": "to do"
-    },
-    {
-      "id": "P4-I017",
-      "category": "spec-compliance",
-      "title": "P3-T006 incomplete: CLI audio path in main.rs still uses inline cpal code instead of audio::start_recording()",
-      "description": "P3-T006 (status 'to do' in PRD_3.json) requires the CLI path in main.rs to call audio::start_recording() / stop_and_save() from src/audio.rs. main.rs currently contains its own duplicate inline cpal stream setup (~lines 200–484). Any bug fixed in audio.rs is not reflected in CLI mode, and the two implementations can diverge silently.",
-      "checks": [
-        "Confirm main.rs contains `device.build_input_stream` (it does, around line 310) — duplicate of audio.rs.",
-        "Refactor main.rs CLI path: replace the inline capture block with `let handle = audio::start_recording(args.device)?;`, block on stdin Enter via read_line, then `let wav_path = handle.stop_and_save()?;`."
+        "Introduce a syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears (reproducing the bug).",
+        "Implement the deferred-alert pattern described above and re-test: the alert should appear after the menu bar icon is visible."
       ],
       "status": "to do"
     },
@@ -250,12 +204,12 @@
     {
       "id": "P4-I022",
       "category": "rules-violation",
-      "title": "eprintln!/println! used for internal diagnostics — violates rust-tracing.mdc",
-      "description": "rust-tracing.mdc rule: 'Never use println! or eprintln! for observability.' In app mode, stderr is not visible to the user (Console.app requires manual filtering). Internal diagnostic messages must use the tracing crate so they are controlled by RUST_LOG and visible in structured log output. Affected sites: src/config.rs has ~8 eprintln! calls for config warnings; src/app.rs:457 uses eprintln! for the rdev error. Note: user-facing messages (alerts) correctly use show_alert() — the concern is internal-only diagnostic output.",
+      "title": "eprintln! used for internal diagnostics in config.rs — violates rust-tracing.mdc",
+      "description": "rust-tracing.mdc rule: 'Never use println! or eprintln! for observability.' src/config.rs has ~12 eprintln! calls covering all I/O and parse warnings in AppConfig::load() and save_prompt(). In app mode, stderr is not visible to the user (Console.app requires manual filtering); these warnings are silently lost. They must use the tracing crate so they are controlled by RUST_LOG and visible in structured log output. Note: the rdev error in src/app.rs was already converted to tracing::error! per P3-T052. Note: user-facing CLI output in main.rs (e.g. 'Recording...', 'Transcribing...', flag-validation errors to stderr) is intentional CLI UI output — do not change those.",
       "checks": [
-        "Search for eprintln!/println! in src/: `grep -rn 'eprintln!\\|println!' src/`.",
-        "Replace each diagnostic eprintln! with the appropriate tracing level: config warnings → `tracing::warn!`, rdev errors → `tracing::error!`, using structured fields not interpolated strings.",
-        "Keep any intentional user-facing stdout output in CLI mode (e.g. 'Recording...', 'Transcribing...') as-is — those are CLI UI output, not observability."
+        "Search for remaining diagnostic eprintln! in config.rs: `grep -n 'eprintln!' src/config.rs`.",
+        "Replace each eprintln! in config.rs with the appropriate tracing level: I/O and serialisation warnings → `tracing::warn!`, using structured key-value fields not interpolated strings.",
+        "Run `cargo clippy -- -D warnings` after the change to confirm no new warnings are introduced."
       ],
       "status": "to do"
     },
@@ -296,13 +250,13 @@
     },
     {
       "id": "P4-I026",
-      "category": "spec-compliance",
-      "title": "P3-T033 partial: @2x Retina icon constants not defined in app.rs",
-      "description": "P3-T033 requires all four icon PNGs to be embedded at compile time as constants ICON_IDLE_1X, ICON_IDLE_2X, ICON_ACTIVE_1X, ICON_ACTIVE_2X. src/app.rs:24–25 defines only ICON_IDLE_1X and ICON_ACTIVE_1X. ICON_IDLE_2X and ICON_ACTIVE_2X are never defined or used. The @2x icons therefore never load, meaning Retina displays always render the 1x icon (blurry on high-DPI screens). Fix: add `const ICON_IDLE_2X: &[u8] = include_bytes!(\"../assets/icons/yaptap-idle@2x.png\");` and the active equivalent, then pass both to the TrayIcon builder if tray-icon supports Retina variants.",
+      "category": "icon",
+      "title": "ICON_IDLE_2X and ICON_ACTIVE_2X are dead_code — tray-icon has no @2x Retina API",
+      "description": "src/app.rs:27–32 defines all four icon constants (ICON_IDLE_1X, ICON_IDLE_2X, ICON_ACTIVE_1X, ICON_ACTIVE_2X). The @2x variants are marked #[allow(dead_code)] because tray-icon 0.14's Icon::from_rgba() takes a flat byte slice with no Retina-specific path. Without loading @2x icons, Retina displays scale up the @1x bitmap (blurry on high-DPI screens). The @2x assets exist (assets/icons/yaptap-idle@2x.png, assets/icons/yaptap-active@2x.png) and are embedded; the gap is on the API side.",
       "checks": [
-        "Confirm assets/icons/yaptap-idle@2x.png and yaptap-active@2x.png exist: `ls assets/icons/`.",
-        "Add the two missing include_bytes! constants in src/app.rs.",
-        "Check tray-icon 0.14 API for a Retina / @2x icon method; use it or document that tray-icon does not yet support Retina overrides."
+        "Check tray-icon 0.14's public API (crates.io documentation or `cargo doc`) for any Retina or HiDPI icon path.",
+        "If no API exists, add a code comment on both `#[allow(dead_code)]` lines: `// tray-icon 0.14 has no @2x API; retained for when Retina support is added.`",
+        "As an alternative path: investigate whether the NSStatusBarButton's NSImage can be replaced with the @2x asset via unsafe Cocoa calls (similar approach to the template flag in P4-I018). If feasible, implement it alongside P4-I018; if not, document why in a code comment."
       ],
       "status": "to do"
     }
