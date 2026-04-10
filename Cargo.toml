@@ -18,3 +18,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
 serde = { version = "1", features = ["derive"] }
+tray-icon = "0.14"
+rdev = "0.5"
+arboard = "3"
+dirs = "5"
+cocoa = "0.25"
+objc = "0.2"
