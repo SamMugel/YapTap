@@ -174,7 +174,7 @@
       "id": "P3-T006",
       "section": "foundation",
       "title": "Update CLI mode in main(): replace the former blocking capture call with start_recording(args.device), block on stdin Enter detection via `read_line()`, then call handle.stop_and_save() before continuing to transcription",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T021",
@@ -361,8 +361,8 @@
       "id": "P3-T069",
       "section": "error-handling",
       "title": "On audio capture error in app mode (cpal stream error callback fires): send `AppEvent::PipelineDone(Err(\"audio device error: <message>\"))` so the main loop transitions to Idle and shows an alert; delete temp WAV if present",
-      "implementation_status": "partial",
-      "notes": "Basic error handling in place via cpal stream error callback logging, but no explicit AppEvent::PipelineDone(Err(...)) from the stream error yet"
+      "implementation_status": "done",
+      "notes": "Stream error callback now sends AppEvent::PipelineDone(Err(...)) via on_error parameter added to start_recording(); PipelineDone handler clears shared.audio"
     },
     {
       "id": "P3-T054",
@@ -452,7 +452,8 @@
       "id": "P3-T070",
       "section": "verification",
       "title": "Verify `cargo build` succeeds with Phase 3 dependencies and `cargo clippy -- -D warnings` passes with no warnings",
-      "implementation_status": "to do"
+      "implementation_status": "done",
+      "notes": "cargo build and cargo clippy -- -D warnings both pass clean"
     },
     {
       "id": "P3-T071",
