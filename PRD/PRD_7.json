@@ -109,6 +109,71 @@
         "Click Quit YapTap → confirm the process exits and `ls ~/.config/yaptap/yaptap.lock` returns 'No such file'."
       ],
       "status": "to do"
+    },
+    {
+      "id": "P7-I011",
+      "category": "verification",
+      "title": "Smoke test: file-based hotkey change takes effect after restart",
+      "description": "The hotkey is already read from ~/.config/yaptap/config.toml at launch and fully wired through config.rs → AppConfig.hotkey → parse_hotkey() → rdev callback. This task verifies the complete round-trip: edit the file, restart, confirm the new key fires and the old key no longer does, and confirm the menu label reflects the new value.",
+      "checks": [
+        "With yaptap running, note the current hotkey displayed in the menu (e.g. 'Hotkey: ⌥Space').",
+        "Click 'Open Config…' — confirm ~/.config/yaptap/config.toml opens in the default editor.",
+        "Change `hotkey = \"option+space\"` to `hotkey = \"cmd+shift+y\"`, save the file.",
+        "Click 'Quit YapTap', then relaunch: `RUST_LOG=info ./target/debug/yaptap`.",
+        "Open the menu — confirm the label now reads 'Hotkey: ⌘⇧Y'.",
+        "Press ⌘⇧Y — confirm the log shows 'HotkeyPressed state=Idle' and the icon switches to active.",
+        "Press ⌥Space — confirm nothing happens (old hotkey is no longer registered).",
+        "Restore `hotkey = \"option+space\"` in the config file, quit and relaunch to leave the app in the default state."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I012",
+      "category": "refactor",
+      "title": "Share ParsedHotkey via Arc<RwLock> so the rdev callback supports live update without restarting the thread",
+      "description": "The rdev callback currently captures `parsed: ParsedHotkey` by move (app.rs:521 `move |event|`). This means the parsed hotkey is immutable for the lifetime of the rdev thread — changing the hotkey in-app requires stopping and restarting the thread, which rdev::listen() does not support (no cancellation API). Fix: create `let parsed_hotkey = Arc::new(RwLock::new(parsed));` before the thread::spawn, clone it into the rdev callback, and read it via `.read().unwrap()` on each KeyPress. Store a second clone of the Arc in SharedState so the main event loop can update it when the user picks a new hotkey.",
+      "checks": [
+        "Add `parsed_hotkey: Arc<RwLock<ParsedHotkey>>` field to SharedState in app.rs.",
+        "In the Ok(parsed) branch of the hotkey-registration block (app.rs:509), wrap parsed: `let hotkey_arc = Arc::new(RwLock::new(parsed)); shared.parsed_hotkey = Arc::clone(&hotkey_arc);`",
+        "Inside the rdev::listen() callback, replace direct reads of `parsed.modifiers` / `parsed.key` with reads through `hotkey_arc.read().unwrap()` — hold the guard for the duration of the key comparison, then drop it.",
+        "If Accessibility is denied (the else branch is skipped), initialise `shared.parsed_hotkey` with the parsed default so the field is always valid.",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean; `cargo test` — all pass.",
+        "Manually verify existing ⌥Space behaviour is unchanged: press hotkey → icon switches to active."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I013",
+      "category": "feature",
+      "title": "Add AppConfig::save_hotkey() for atomic hotkey persistence in config.rs",
+      "description": "save_prompt() (config.rs:169) already implements the atomic write pattern (write to .tmp, rename into place, EXDEV fallback). save_hotkey() must follow the identical pattern: clone self, set self.hotkey = new_value, serialise, atomic write. This is separate from save_prompt() because both fields can be updated independently and the caller must update config.hotkey in memory separately.",
+      "checks": [
+        "Add `pub fn save_hotkey(&self, hotkey: &str) -> anyhow::Result<()>` to impl AppConfig in config.rs, following the same atomic write logic as save_prompt().",
+        "The method clones self, sets `clone.hotkey = hotkey.to_string()`, serialises with toml::to_string_pretty, writes to .tmp, renames to config.toml (EXDEV fallback identical to save_prompt).",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean; `cargo test` — all pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P7-I014",
+      "category": "feature",
+      "title": "Add in-app hotkey change: enable the Hotkey menu item, show an input dialog, validate, apply live, persist",
+      "description": "The 'Hotkey: ⌥Space' menu item is currently disabled (app.rs:339 `false`). This task makes it interactive: clicking it opens an NSAlert with an NSTextField pre-filled with the current hotkey string (e.g. 'option+space'). The user edits the string, clicks OK; the app validates with parse_hotkey(), shows an error alert on invalid input, and on success: (1) updates shared.parsed_hotkey via RwLock so the rdev thread picks up the new combo immediately, (2) calls config.save_hotkey() to persist, (3) updates config.hotkey in memory, (4) calls rebuild_menu() so the label reflects the new hotkey. Depends on P7-I012 (Arc<RwLock<ParsedHotkey>>) and P7-I013 (save_hotkey).",
+      "checks": [
+        "In build_menu() (app.rs), change the hotkey MenuItem from `MenuItem::new(&hotkey_text, false, None)` to `MenuItem::new(&hotkey_text, true, None)` and insert `MenuAction::ChangeHotkey` into actions for its id.",
+        "Add `ChangeHotkey` variant to the MenuAction enum.",
+        "In the MenuEvent handler, add a `MenuAction::ChangeHotkey` arm that calls a new `prompt_hotkey_change(current: &str) -> Option<String>` helper returning the validated new hotkey string, or None if the user cancelled or input was invalid.",
+        "Implement `prompt_hotkey_change()` using NSAlert + NSTextField (objc msg_send!): create an NSAlert, set its message text to 'Enter new hotkey (e.g. option+space, cmd+shift+y):', add an NSTextField accessory view pre-filled with the current hotkey, run the alert modally, read the text field on OK.",
+        "After a non-None return from prompt_hotkey_change(): call parse_hotkey() to get the new ParsedHotkey, write it to shared.parsed_hotkey via RwLock write guard, call config.save_hotkey(&new_str), set config.hotkey = new_str.clone(), call rebuild_menu().",
+        "If the user types an invalid string and clicks OK: show an error alert 'Invalid hotkey: <value>. Use format option+space or cmd+shift+y.' and make no changes.",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Click 'Hotkey: ⌥Space' in the menu → dialog appears pre-filled with 'option+space'.",
+        "Type 'cmd+shift+y' → OK → menu label updates to 'Hotkey: ⌘⇧Y' → press ⌘⇧Y → icon switches to active.",
+        "Type an invalid value (e.g. 'win+r') → OK → error alert appears → old hotkey still works.",
+        "Click Cancel → no change.",
+        "Relaunch the app → confirm the new hotkey persists (was saved to config.toml)."
+      ],
+      "status": "to do"
     }
   ]
 }
