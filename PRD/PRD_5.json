@@ -1,0 +1,196 @@
+{
+  "phase": 5,
+  "phase_name": "Startup Crash — NSSystemStatusBar statusItems",
+  "problem_statement": "After a new build, yaptap crashes immediately on launch with NSInvalidArgumentException: '-[NSSystemStatusBar statusItems]: unrecognized selector sent to instance'. The crash occurs in run_app() before the main event loop starts, so the menu bar icon never appears. All Phase 3 functionality is unreachable.",
+  "exception": {
+    "type": "NSInvalidArgumentException",
+    "reason": "-[NSSystemStatusBar statusItems]: unrecognized selector sent to instance 0x6000013e0640",
+    "crash_site": "src/app.rs:533 — msg_send![status_bar, statusItems]",
+    "call_frame": "yaptap _ZN6yaptap3app7run_app17hf36573e8531e3a58E + 3739",
+    "root_cause": "statusItems is not a documented public property of NSStatusBar. The runtime class returned by [NSStatusBar systemStatusBar] is NSSystemStatusBar (a private Apple class). On the current macOS version NSSystemStatusBar does not expose the statusItems selector — it was either never public or was removed. The code at app.rs:530-545 (P3-T034 implementation) unconditionally calls this selector to find the most recently created NSStatusItem and mark its image as a template image. There is no nil-guard or @try wrapper, so the unrecognised selector terminates the process."
+  },
+  "note": "Issues are ordered by priority: crash fix first, then issues that will surface once the app starts (pipeline paths, hotkey), then code-quality items. Issues from PRD_4 that are still 'to do' are re-listed here when they block the app from working correctly. 'done' means confirmed correct by code review or test; 'to do' means action required.",
+  "issues": [
+    {
+      "id": "P5-I001",
+      "category": "crash",
+      "title": "Remove the statusItems unsafe block that crashes on startup (src/app.rs:530-545)",
+      "description": "The unsafe block at app.rs:530-545 calls `msg_send![status_bar, statusItems]` on the object returned by `[NSStatusBar systemStatusBar]`. The runtime class is NSSystemStatusBar, which does not recognise the statusItems selector on the current macOS version, producing a fatal NSInvalidArgumentException before any UI is shown. This block was added as part of P3-T034 to mark the tray icon image as a macOS template image. The entire block must be removed or replaced with a mechanism that does not call statusItems.",
+      "fix": "Delete the unsafe block at app.rs lines 530-545 in its entirety. This eliminates the crash. The template image flag (setTemplate:YES) will be addressed separately in P5-I002. Definition of done: `cargo build` succeeds; running `yaptap` no longer crashes; the menu bar icon appears.",
+      "status": "to do"
+    },
+    {
+      "id": "P5-I002",
+      "category": "icon",
+      "title": "Find a working replacement for the statusItems-based template image approach",
+      "description": "After removing the crashing block (P5-I001), the tray icon image will no longer be marked as a macOS template image. Template images are monochrome: the OS renders their alpha channel in the system menu bar colour, adapting automatically for light and dark appearances. Without the flag, the literal RGBA bitmap is used — a black icon on a dark menu bar may be hard to see. The spec (menubar.md) explicitly requires template image rendering. The P3-T034 notes documented this intent.",
+      "checks": [
+        "Check tray-icon 0.14 changelog and docs for a built-in template image API (e.g. TrayIconBuilder::with_template_image or similar). If it exists, use it instead of unsafe Cocoa code. Run `cargo doc --open` for tray-icon to inspect.",
+        "Check whether upgrading tray-icon from 0.14 to the latest 0.x release adds template image support. Run `cargo update tray-icon` in a scratch branch and check the release notes / CHANGELOG.",
+        "If no tray-icon API exists, implement a safe alternative: after `TrayIconBuilder::build()`, use `[[NSStatusBar systemStatusBar] _statusItems]` (the private backing ivar, underscore-prefixed). This selector may exist even when statusItems does not. Wrap the call in an `objc_msgSend` trampoline with a check that the returned object responds to the count selector before dereferencing. Add a nil guard and a responds-to-selector check before calling count or objectAtIndex:.",
+        "If the underscore variant also fails, implement a one-shot NSTimer callback scheduled for 0.0 s that fires after the run loop starts. By then the NSStatusItem is reachable. In the callback, enumerate the status bar items via a @try/@catch guard (using objc's @try equivalent) and call setTemplate:YES on the button image. This avoids the crash-before-loop problem in the original implementation.",
+        "Fallback if all dynamic approaches fail: accept that the icon renders as a literal bitmap and add a code comment explaining why. The icons are black-on-transparent, which is acceptable in light mode. Document in a FIXME comment that template rendering requires a future tray-icon API."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I003",
+      "category": "build",
+      "title": "Verify cargo build and cargo clippy pass cleanly after the crash fix",
+      "description": "Removing the unsafe block may leave orphaned imports (cocoa::base::{nil, YES}) if they are no longer used elsewhere in the block or the file. clippy with -D warnings will reject dead imports. The fix must compile clean.",
+      "checks": [
+        "Run `cargo build` and confirm exit 0.",
+        "Run `cargo clippy -- -D warnings` and confirm no warnings. Remove any unused imports that were only needed by the removed block.",
+        "Run `cargo test` to confirm the hotkey unit tests still pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I004",
+      "category": "runtime",
+      "title": "Verify the app starts and shows the menu bar icon after the crash fix",
+      "description": "After removing the crashing block, run_app() should proceed to the main event loop and display the tray icon. Confirm this end-to-end.",
+      "checks": [
+        "Run `cargo build` then `./target/debug/yaptap` with no arguments.",
+        "Confirm no crash. Confirm the three-bar equalizer icon appears in the menu bar.",
+        "Click the icon and confirm the dropdown menu opens with the expected items (prompts, No Prompt, Hotkey display, Open Config, Quit).",
+        "Confirm the process does not appear in the Dock (LSUIElement / accessory mode).",
+        "Run `lsappinfo list | grep yaptap` and confirm type=UIElement."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I005",
+      "category": "icon",
+      "title": "Verify icon visibility in dark menu bar appearance after crash fix",
+      "description": "Without the template image flag, the black icon may be invisible on a dark menu bar. This is the core reason P3-T034 existed. Confirm the icon is visible in both light and dark appearances, and document the gap if the template flag could not be set.",
+      "checks": [
+        "Switch macOS to Dark appearance (System Settings → Appearance → Dark).",
+        "Observe the yaptap icon in the menu bar. If it is invisible (black on black), template image is required.",
+        "Switch to Light appearance and confirm the icon is visible there.",
+        "If the icon is invisible in dark mode, prioritise P5-I002 (template image replacement) before shipping."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I006",
+      "category": "pipeline",
+      "title": "transcription.rs and llm.rs reference scripts by process-cwd-relative path — fail in app mode (inherited from P4-I013)",
+      "description": "src/transcription.rs passes `\"src/core/transcribe.py\"` and src/llm.rs passes `\"src/core/llm.py\"` to python3 as relative paths. These resolve against the process working directory. In app mode (launched from Finder, login items, or the terminal from a different directory), cwd is not the project root and python3 reports 'can't open file'. This means every hotkey press in app mode will fail at the pipeline step with a PipelineDone(Err) alert. The crash fix (P5-I001) unblocks reaching this code path, making this the next blocker.",
+      "checks": [
+        "After fixing P5-I001, press the hotkey twice in app mode and observe the error alert. It should say something like 'can't open file src/core/transcribe.py'.",
+        "Fix: mirror the prompts_dir() logic in config.rs. In transcription.rs and llm.rs, resolve the script path relative to the binary: `std::env::current_exe()?.parent()?.join(\"../src/core/transcribe.py\")` for development layout, or embed the scripts as byte-slice constants and write them to a temp file at runtime for a single-binary distribution.",
+        "Simplest development fix: use `std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join(\"../../src/core/transcribe.py\")))` (one level up from target/debug/ is the project root, then into src/core/).",
+        "Confirm by running yaptap from a different cwd (e.g. `cd /tmp && /path/to/yaptap`) and pressing the hotkey — transcription should succeed."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I007",
+      "category": "hotkey",
+      "title": "Right Option key maps to rdev::Key::AltGr, not Key::Alt — right ⌥Option never triggers hotkey (inherited from P4-I008)",
+      "description": "parse_modifier() in hotkey.rs returns rdev::Key::Alt for the 'option' token (left Option, hardware keycode 58). The right Option key (keycode 61) maps to rdev::Key::AltGr in rdev's macOS backend. The modifier check at app.rs:481 uses modifiers.iter().all(|m| pressed.contains(m)), which only checks for Alt, not AltGr. Right Option presses are never counted as satisfying the 'option' modifier. Users who habitually use the right Option key will never trigger the hotkey.",
+      "checks": [
+        "Test: with the default 'option+space' hotkey, press RIGHT Option + Space. Confirm the icon does not switch to active (reproducing the bug).",
+        "Test: press LEFT Option + Space. Confirm it works.",
+        "Fix: change parse_modifier() to return two keys when 'option' is parsed, and update ParsedHotkey to hold a Vec<Vec<rdev::Key>> (each inner vec is a group of keys any of which satisfies that modifier slot). Alternatively, change the modifier check to treat Alt and AltGr as equivalent: `parsed.modifiers.iter().all(|m| pressed.contains(m) || (*m == rdev::Key::Alt && pressed.contains(&rdev::Key::AltGr)) || (*m == rdev::Key::AltGr && pressed.contains(&rdev::Key::Alt)))`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I008",
+      "category": "hotkey",
+      "title": "Key auto-repeat fires multiple HotkeyPressed events per physical press — accidental recording stop (inherited from P4-I009)",
+      "description": "macOS sends repeated KeyPress events (~10–30 Hz) while any key is held. The rdev callback at app.rs:477-485 fires AppEvent::HotkeyPressed on every KeyPress where the full combo is satisfied. Holding ⌥Space for more than ~100 ms sends multiple HotkeyPressed events in quick succession: the first transitions Idle→Recording, and the next (before the key is released) transitions Recording→Processing, sending zero audio to the pipeline.",
+      "checks": [
+        "Hold ⌥Space for ~300 ms. Confirm the app transitions to Processing (orange icon) without the user releasing the key.",
+        "Fix: add a bool `hotkey_main_was_down: bool` in the rdev closure. Set it true on the leading edge of the main key (KeyPress with hotkey_main_was_down == false) and fire HotkeyPressed only at that point. Reset it to false on KeyRelease of the main key."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I009",
+      "category": "hotkey",
+      "title": "Hotkey fires when modifier is pressed after main key is already held (inherited from P4-I011)",
+      "description": "The rdev callback fires HotkeyPressed whenever the pressed-keys set satisfies the full combo, regardless of which key was just pressed. If the user holds Space and then presses Option (e.g. during normal typing in another app), the combo is momentarily satisfied and recording starts. Fix: fire only when the key that was just pressed equals parsed.key (the main key), not when a modifier completes the set.",
+      "checks": [
+        "With another app focused, hold Space then press Option — confirm yaptap starts recording unexpectedly (reproducing the bug).",
+        "Fix: inside the `rdev::EventType::KeyPress(key)` arm, change the condition from `if modifiers_held && pressed.contains(&parsed.key)` to `if modifiers_held && key == parsed.key` (the `key` is already bound by the outer match arm)."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I010",
+      "category": "permissions",
+      "title": "Accessibility and Input Monitoring permissions must be granted before the hotkey works (inherited from P4-I001, P4-I002)",
+      "description": "rdev requires Accessibility permission (AXIsProcessTrusted()) and, on macOS 14+, also Input Monitoring permission. The app checks Accessibility at launch and shows an alert if absent, but does not check Input Monitoring at all. On macOS 14+, if Input Monitoring is absent, rdev::listen() starts without error but receives no events — the hotkey is silently non-functional with no user feedback.",
+      "checks": [
+        "Run `sw_vers -productVersion`. If >= 14.0, open System Settings → Privacy & Security → Input Monitoring and confirm yaptap is listed and checked.",
+        "If Input Monitoring is absent: the binary must be added manually or the app must request it. Add a startup check: attempt to send a synthetic key event and verify it arrives; if it does not, show_alert() that Input Monitoring is required.",
+        "Confirm Accessibility permission is listed and checked for the exact binary path being run (debug vs release builds have different paths and require separate permission grants).",
+        "After granting either permission, quit and re-launch (permissions take effect only after restart)."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I011",
+      "category": "code",
+      "title": "eprintln! used for all config diagnostics in config.rs — invisible in app mode (inherited from P4-I022)",
+      "description": "AppConfig::load() and save_prompt() use eprintln! for all warnings (failed directory creation, TOML parse errors, invalid hotkey, failed saves). In app mode stderr is invisible. These should use tracing::warn! so they are controlled by RUST_LOG and visible in Console.app.",
+      "checks": [
+        "Run `grep -n 'eprintln!' src/config.rs` — expect ~12 matches.",
+        "Replace each eprintln! with tracing::warn!(field = ?value, \"message\") using structured key-value pairs.",
+        "Run `cargo clippy -- -D warnings` to confirm no new warnings.",
+        "Run RUST_LOG=warn ./target/debug/yaptap and confirm config warnings appear in the terminal."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I012",
+      "category": "code",
+      "title": "Config parse and hotkey errors are silently swallowed in app mode — user never sees a UI alert (inherited from P4-I014)",
+      "description": "P3-T017 and P3-T018 specify that config parse errors and invalid hotkey values must show show_alert() dialogs. AppConfig::load() is called before finishLaunching, so show_alert() cannot be called from within load(). The current code uses eprintln! (not visible in app mode) and returns defaults with no UI feedback. Users with a corrupt config.toml see no alert and have no indication why the hotkey or prompt selection did not load.",
+      "checks": [
+        "Introduce a TOML syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears (reproducing the bug).",
+        "Fix: change AppConfig::load() to return (AppConfig, Vec<String>) where the Vec carries deferred warning messages. In run_app(), after finishLaunching (line 426), iterate the warnings and call show_alert() for each before continuing.",
+        "Re-test with corrupt config — confirm the alert appears after the menu bar icon is visible."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I013",
+      "category": "code",
+      "title": "unsafe blocks in app.rs lack // SAFETY: comments — violates the project safety rule (inherited from P4-I023)",
+      "description": "Multiple unsafe blocks in app.rs (show_alert, run_app NSApplication setup, the event loop nextEventMatchingMask call, the autorelease pool drain) have no SAFETY justification comment explaining why the Cocoa pointer operations are sound. The project rule is: every unsafe block must have a comment documenting the invariant that makes it safe.",
+      "checks": [
+        "Run `grep -n 'unsafe' src/app.rs` to list all sites.",
+        "For each site, add a `// SAFETY:` comment explaining: (a) the Cocoa object pointers are valid because they come from documented AppKit factory methods, (b) all msg_send! calls are on the main thread, (c) autorelease pool drain is sound because it was created on the same thread this iteration."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I014",
+      "category": "code",
+      "title": "#[allow(clippy::comparison_to_empty)] suppresses fixable lints in app.rs (inherited from P4-I024)",
+      "description": "app.rs uses `config.selected_prompt == \"\"` at lines 307 and 398, suppressed with #[allow(clippy::comparison_to_empty)]. The idiomatic fix is `.is_empty()`. The suppression attributes can be removed once the comparisons are replaced.",
+      "checks": [
+        "Replace `config.selected_prompt == \"\"` with `config.selected_prompt.is_empty()` in both occurrences.",
+        "Remove the two #[allow(clippy::comparison_to_empty)] attributes.",
+        "Run `cargo clippy -- -D warnings` and confirm clean."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P5-I015",
+      "category": "code",
+      "title": "let _ = menu.append() silently discards errors in build_menu() (inherited from P4-I025)",
+      "description": "build_menu() uses `let _ = menu.append(...)` for every menu item, silently dropping any error returned by tray-icon. If an append fails (invalid menu state, item limit), the item is missing from the menu with no log or alert.",
+      "checks": [
+        "Run `grep -n 'let _ = menu.append' src/app.rs` — expect ~9 matches.",
+        "Replace each with `if let Err(e) = menu.append(...) { tracing::warn!(error = ?e, \"failed to append menu item\"); }`.",
+        "Run `cargo clippy -- -D warnings` and confirm clean."
+      ],
+      "status": "to do"
+    }
+  ]
+}
