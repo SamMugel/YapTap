@@ -1,12 +1,16 @@
-/// YapTap — Phase 2 CLI voice transcription + LLM pipeline entry point.
-#[allow(dead_code)]
-mod audio;
-#[allow(dead_code)]
-mod hotkey;
+/// YapTap — Phase 3 CLI voice transcription + LLM pipeline entry point.
 ///
 /// Records microphone audio, writes a temporary WAV file, delegates
 /// transcription to `python3 src/core/transcribe.py <wav_path>`, and
 /// optionally pipes the transcript through an LLM via `python3 src/core/llm.py`.
+/// When invoked with no flags, launches the menu-bar app via `app::run_app()`.
+mod app;
+mod audio;
+mod config;
+mod hotkey;
+mod llm;
+mod transcription;
+
 use std::{
     io::{self, Write},
     path::{Path, PathBuf},
@@ -49,6 +53,10 @@ struct Args {
     /// List available prompts and exit
     #[arg(long)]
     list_prompts: bool,
+
+    /// Select audio input device by index
+    #[arg(long)]
+    device: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -60,22 +68,6 @@ struct PromptToml {
 }
 
 // ── Helper functions ──────────────────────────────────────────────────────────
-
-fn prompts_dir() -> Option<PathBuf> {
-    // Prefer <binary_dir>/config/prompts; fall back to <cwd>/config/prompts
-    // so that development builds (target/debug/) find the project-root prompts.
-    let bin_relative = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("config/prompts")));
-    if let Some(ref p) = bin_relative {
-        if p.is_dir() {
-            return bin_relative;
-        }
-    }
-    std::env::current_dir()
-        .ok()
-        .map(|d| d.join("config/prompts"))
-}
 
 fn validate_prompt_toml(content: &str, path: &Path) {
     match toml::from_str::<toml::Value>(content) {
@@ -100,7 +92,7 @@ fn validate_prompt_toml(content: &str, path: &Path) {
 fn resolve_prompt_file(args: &Args) -> Option<PathBuf> {
     // Returns None if no prompt flag given; exits process on error
     if let Some(ref name) = args.prompt {
-        let dir = match prompts_dir() {
+        let dir = match config::prompts_dir() {
             Some(d) if d.is_dir() => d,
             _ => {
                 eprintln!("error: prompts directory not found: config/prompts/");
@@ -140,6 +132,18 @@ fn main() -> Result<()> {
     // ── Parse CLI args ────────────────────────────────────────────────────────
     let args = Args::parse();
 
+    // Mode detection: no flags → app mode
+    if args.prompt.is_none()
+        && args.prompt_file.is_none()
+        && !args.list_prompts
+        && args.model.is_none()
+        && args.llm_model.is_none()
+        && args.device.is_none()
+    {
+        app::run_app();
+        return Ok(());
+    }
+
     // Mutual exclusion check
     if args.prompt.is_some() && args.prompt_file.is_some() {
         eprintln!("error: --prompt and --prompt-file are mutually exclusive");
@@ -148,7 +152,7 @@ fn main() -> Result<()> {
 
     // ── Handle --list-prompts (early exit) ────────────────────────────────────
     if args.list_prompts {
-        let dir = match prompts_dir() {
+        let dir = match config::prompts_dir() {
             Some(d) if d.is_dir() => d,
             _ => {
                 eprintln!("error: prompts directory not found: config/prompts/");
