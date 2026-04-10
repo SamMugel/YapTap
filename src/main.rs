@@ -287,25 +287,19 @@ fn main() -> Result<()> {
     // ── 14. Transcribe ────────────────────────────────────────────────────────
     println!("Transcribing...");
 
-    let mut transcribe_cmd = process::Command::new("python3");
-    transcribe_cmd.arg("src/core/transcribe.py").arg(&wav_path);
-    if let Some(ref model) = args.model {
-        transcribe_cmd.args(["--model", model]);
-    }
-    let output = transcribe_cmd
-        .output()
-        .context("while spawning python3 transcribe.py")?;
+    let whisper_model = args.model.as_deref().unwrap_or("base");
+    let cli_active_child: Arc<Mutex<Option<process::Child>>> = Arc::new(Mutex::new(None));
+    let transcript = match transcription::run_transcription(&wav_path, whisper_model, &cli_active_child) {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = std::fs::remove_file(&wav_path);
+            eprintln!("error: {e}");
+            process::exit(1);
+        }
+    };
 
     // Remove temp file regardless of outcome.
     let _ = std::fs::remove_file(&wav_path);
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("error: transcription failed — {}", stderr.trim_end());
-        process::exit(1);
-    }
-
-    let transcript = String::from_utf8_lossy(&output.stdout).into_owned();
 
     // ── 15. LLM pipeline (Phase 2) or print transcript (Phase 1) ─────────────
     if let Some(ref ppath) = prompt_path {

@@ -11,7 +11,10 @@ use std::collections::HashSet;
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::process::Child;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc, Arc, Mutex,
+};
 use std::thread;
 
 use cocoa::base::id;
@@ -22,13 +25,18 @@ use crate::config::AppConfig;
 // ── Icon bytes (embedded at compile time) ─────────────────────────────────────
 
 const ICON_IDLE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-idle.png");
+#[allow(dead_code)]
+const ICON_IDLE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-idle@2x.png");
 const ICON_ACTIVE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-active.png");
+#[allow(dead_code)]
+const ICON_ACTIVE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-active@2x.png");
 
 // ── Public event enum ─────────────────────────────────────────────────────────
 
 pub enum AppEvent {
     HotkeyPressed,
     PipelineDone(Result<String, String>),
+    HotkeyError(String),
 }
 
 // ── Internal state ────────────────────────────────────────────────────────────
@@ -201,13 +209,17 @@ fn switch_icon(tray: &tray_icon::TrayIcon, state: &AppState) {
 // ── Menu building ─────────────────────────────────────────────────────────────
 
 fn hotkey_display(hotkey: &str) -> String {
-    hotkey
+    let s = hotkey
         .replace("option", "\u{2325}") // ⌥
         .replace("cmd", "\u{2318}")    // ⌘
         .replace("ctrl", "\u{2303}")   // ⌃
         .replace("shift", "\u{21E7}")  // ⇧
         .replace("space", "Space")
-        .replace('+', "")
+        .replace('+', "");
+    // Uppercase any remaining ASCII letter (the main key character).
+    s.chars()
+        .map(|c| if c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c })
+        .collect()
 }
 
 fn load_prompts() -> Vec<PromptEntry> {
@@ -408,12 +420,17 @@ pub fn run_app() {
     let shared = Arc::new(SharedState::new());
 
     // ── SIGTERM / SIGINT handler ──────────────────────────────────────────────
-    // Signal handlers must be Send; cpal::Stream is not Send, so we can't
-    // capture `shared` directly.  Instead we just remove the lock file and exit.
-    let _ = ctrlc::set_handler(move || {
-        remove_lock_file();
-        std::process::exit(0);
-    });
+    // cpal::Stream is !Send so SharedState cannot be captured by the signal
+    // handler thread.  Instead we set an AtomicBool; the main event loop checks
+    // it each iteration and calls cleanup_and_exit() (which kills the child
+    // process, stops audio, removes the lock file, and exits).
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    {
+        let flag = Arc::clone(&shutdown_requested);
+        let _ = ctrlc::set_handler(move || {
+            flag.store(true, Ordering::SeqCst);
+        });
+    }
 
     // ── App-event channel ─────────────────────────────────────────────────────
     let (app_event_tx, app_event_rx) = mpsc::channel::<AppEvent>();
@@ -435,7 +452,11 @@ pub fn run_app() {
         match crate::hotkey::parse_hotkey(&config.hotkey) {
             Ok(parsed) => {
                 let tx = Arc::clone(&app_event_tx);
+                let hotkey_str = config.hotkey.clone();
                 thread::spawn(move || {
+                    // tx_inner is moved into the rdev callback; tx is kept for
+                    // the error path after rdev::listen() returns.
+                    let tx_inner = Arc::clone(&tx);
                     let mut pressed: HashSet<rdev::Key> = HashSet::new();
                     let result = rdev::listen(move |event| {
                         match event.event_type {
@@ -444,7 +465,7 @@ pub fn run_app() {
                                 let modifiers_held =
                                     parsed.modifiers.iter().all(|m| pressed.contains(m));
                                 if modifiers_held && pressed.contains(&parsed.key) {
-                                    let _ = tx.send(AppEvent::HotkeyPressed);
+                                    let _ = tx_inner.send(AppEvent::HotkeyPressed);
                                 }
                             }
                             rdev::EventType::KeyRelease(key) => {
@@ -454,12 +475,17 @@ pub fn run_app() {
                         }
                     });
                     if let Err(e) = result {
-                        eprintln!("rdev listen error: {e:?}");
+                        tracing::error!("rdev listen error: {e:?}");
+                        let _ = tx.send(AppEvent::HotkeyError(format!(
+                            "The hotkey '{hotkey_str}' could not be registered. \
+                             Edit ~/.config/yaptap/config.toml to choose a different \
+                             hotkey, then restart YapTap."
+                        )));
                     }
                 });
             }
             Err(e) => {
-                eprintln!("warning: could not parse hotkey {:?}: {}", config.hotkey, e);
+                tracing::error!("could not parse hotkey {:?}: {}", config.hotkey, e);
             }
         }
     }
@@ -478,6 +504,13 @@ pub fn run_app() {
 
     // ── Main event loop ───────────────────────────────────────────────────────
     loop {
+        // Check if a signal handler has requested shutdown.  cleanup_and_exit()
+        // kills any active subprocess, stops audio capture, removes the lock
+        // file, and calls process::exit(0).
+        if shutdown_requested.load(Ordering::SeqCst) {
+            cleanup_and_exit(&shared);
+        }
+
         // Each iteration gets its own autorelease pool — Cocoa allocates many
         // temporary objects during event processing that must be drained promptly.
         let pool: id = unsafe { msg_send![objc::class!(NSAutoreleasePool), new] };
@@ -622,6 +655,10 @@ pub fn run_app() {
                             show_alert("Pipeline Error", &msg, &["OK"]);
                         }
                     }
+                }
+
+                AppEvent::HotkeyError(msg) => {
+                    show_alert("Hotkey Error", &msg, &["OK"]);
                 }
             }
         }

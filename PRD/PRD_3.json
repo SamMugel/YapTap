@@ -102,8 +102,8 @@
       "id": "P3-T007",
       "section": "foundation",
       "title": "Create src/transcription.rs and add `mod transcription;` to main.rs: implement `fn run_transcription(wav_path: &Path, model: &str, active_child: &Arc<Mutex<Option<Child>>>) -> anyhow::Result<String>` — store the spawned `Child` in `active_child` before waiting, clear it on completion; update CLI path in main() to call this function",
-      "implementation_status": "partial",
-      "notes": "transcription.rs exists and run_transcription() is used by app mode (app.rs). CLI path in main.rs still uses inline process::Command::new(\"python3\").arg(\"src/core/transcribe.py\") — never updated to call run_transcription()"
+      "implementation_status": "done",
+      "notes": "CLI now calls transcription::run_transcription() with default model 'base'. Removed inline process::Command."
     },
     {
       "id": "P3-T008",
@@ -230,8 +230,8 @@
       "id": "P3-T033",
       "section": "icon-assets",
       "title": "In src/app.rs: embed all four icon PNGs at compile time via `include_bytes!()` and expose as constants `ICON_IDLE_1X`, `ICON_IDLE_2X`, `ICON_ACTIVE_1X`, `ICON_ACTIVE_2X`; use these byte slices everywhere icons are loaded (eliminates runtime filesystem dependency)",
-      "implementation_status": "partial",
-      "notes": "Only ICON_IDLE_1X and ICON_ACTIVE_1X are defined. ICON_IDLE_2X and ICON_ACTIVE_2X constants are missing — the @2x PNG files exist on disk but are never embedded or used. Retina display icons are not wired up."
+      "implementation_status": "done",
+      "notes": "All four constants defined: ICON_IDLE_1X, ICON_IDLE_2X, ICON_ACTIVE_1X, ICON_ACTIVE_2X. @2x constants marked #[allow(dead_code)] as Retina switching is deferred."
     },
     {
       "id": "P3-T034",
@@ -280,8 +280,8 @@
       "id": "P3-T041",
       "section": "prompt-menu",
       "title": "In build_menu(): add a disabled hotkey display item formatting the configured hotkey string with Unicode modifier symbols (option→⌥, cmd→⌘, ctrl→⌃, shift→⇧, space→Space), e.g. \"Hotkey: ⌥Space\"",
-      "implementation_status": "partial",
-      "notes": "hotkey_display() is implemented and works correctly for the default 'option+space' → '⌥Space'. Bug: letter keys are not uppercased — 'cmd+shift+y' produces '⌘⇧y' instead of '⌘⇧Y'. The .replace('+', \"\") strip is correct but a .to_uppercase() pass on the final char is missing."
+      "implementation_status": "done",
+      "notes": "hotkey_display() now maps each ASCII lowercase char to uppercase via .to_ascii_uppercase(), fixing 'cmd+shift+y' → '⌘⇧Y'."
     },
     {
       "id": "P3-T042",
@@ -353,15 +353,15 @@
       "id": "P3-T052",
       "section": "hotkey",
       "title": "If `rdev::listen()` returns an error: call `show_alert()` with message \"The hotkey '<configured-value>' could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.\"",
-      "implementation_status": "partial",
-      "notes": "rdev::listen() errors are only logged to stderr (eprintln!), which also violates rust-tracing rules (use tracing::error! for observability). show_alert() is not called. Blocked: show_alert() requires the main thread (Cocoa NSAlert), but the rdev callback runs on a background thread. Fix: add a new `AppEvent::HotkeyError(String)` variant to the AppEvent enum — do not reuse PipelineDone, which is semantically incorrect for a registration-time error; send it from the background rdev thread; replace eprintln! with tracing::error!; handle HotkeyError in the main event loop by calling show_alert() with the configured hotkey value."
+      "implementation_status": "done",
+      "notes": "AppEvent::HotkeyError(String) added. rdev callback uses tx_inner clone; outer tx sends HotkeyError on rdev::listen() failure. eprintln! replaced with tracing::error!. Main loop handles HotkeyError by calling show_alert()."
     },
     {
       "id": "P3-T068",
       "section": "error-handling",
       "title": "Register an app-mode SIGTERM handler via the ctrlc crate (termination feature): in app mode, call `cleanup_and_exit()`; ensure this does not overwrite the existing CLI-mode SIGINT handler (which exits 130) — gate the handler on whether run_app() was entered",
-      "implementation_status": "partial",
-      "notes": "ctrlc handler is registered in app mode (correctly gated; does not affect CLI mode). However it only calls remove_lock_file() + exit(0), NOT cleanup_and_exit(). Reason: SharedState is !Send (AudioHandle contains cpal::Stream which is !Send), so it cannot be captured by the signal handler closure. Fix: use an Arc<AtomicBool> shutdown flag; signal handler sets the flag; main loop checks the flag each iteration and calls cleanup_and_exit()."
+      "implementation_status": "done",
+      "notes": "Arc<AtomicBool> shutdown_requested added. ctrlc handler sets the flag. Main loop checks flag at top of each iteration and calls cleanup_and_exit() which kills child, stops audio, removes lock file, exits."
     },
     {
       "id": "P3-T069",
@@ -490,7 +490,8 @@
       "id": "P3-T075",
       "section": "foundation",
       "title": "In src/hotkey.rs: extend parse_key() to handle f13–f20 function keys; spec (config.md) states f1–f20 are valid key tokens but only f1–f12 are implemented; a test already asserts 'cmd+f13' is an error, which should be updated to expect Ok",
-      "implementation_status": "to do"
+      "implementation_status": "done",
+      "notes": "f13-f20 implemented via rdev::Key::Unknown(u32) with macOS CGKeyCode values (105,107,113,106,64,79,80,90). rdev 0.5.3 lacks named F13-F20 variants. Tests updated to assert Unknown(n) values."
     }
   ]
 }

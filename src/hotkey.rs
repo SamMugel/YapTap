@@ -16,7 +16,7 @@ pub struct ParsedHotkey {
 ///
 /// Valid main keys: any single printable char (`a`-`z`, `0`-`9`), or the
 /// named keys `space`, `tab`, `return`, `escape`, `delete`, `left`, `right`,
-/// `up`, `down`, `f1`-`f12`.
+/// `up`, `down`, `f1`-`f20`.
 ///
 /// Returns `Err` if any token is unrecognised.
 pub fn parse_hotkey(s: &str) -> anyhow::Result<ParsedHotkey> {
@@ -77,6 +77,17 @@ fn parse_key(tok: &str) -> Option<rdev::Key> {
         "f10"    => return Some(rdev::Key::F10),
         "f11"    => return Some(rdev::Key::F11),
         "f12"    => return Some(rdev::Key::F12),
+        // rdev 0.5.3 does not have F13-F20 named variants; they map to
+        // Unknown(u32) with macOS CGKeyCode values (105,107,113,106,64,79,80,90).
+        // When rdev adds F13-F20 variants, update these arms.
+        "f13"    => return Some(rdev::Key::Unknown(105)),
+        "f14"    => return Some(rdev::Key::Unknown(107)),
+        "f15"    => return Some(rdev::Key::Unknown(113)),
+        "f16"    => return Some(rdev::Key::Unknown(106)),
+        "f17"    => return Some(rdev::Key::Unknown(64)),
+        "f18"    => return Some(rdev::Key::Unknown(79)),
+        "f19"    => return Some(rdev::Key::Unknown(80)),
+        "f20"    => return Some(rdev::Key::Unknown(90)),
         _ => {}
     }
 
@@ -185,8 +196,22 @@ mod tests {
     }
 
     #[test]
+    fn test_f13_is_valid() {
+        // rdev 0.5.3 lacks F13 named variant; we use Unknown(105) (macOS CGKeyCode).
+        let hk = parse_hotkey("cmd+f13").unwrap();
+        assert_eq!(hk.key, rdev::Key::Unknown(105));
+    }
+
+    #[test]
+    fn test_f20_is_valid() {
+        // rdev 0.5.3 lacks F20 named variant; we use Unknown(90) (macOS CGKeyCode).
+        let hk = parse_hotkey("f20").unwrap();
+        assert_eq!(hk.key, rdev::Key::Unknown(90));
+    }
+
+    #[test]
     fn test_unknown_key_errors() {
-        assert!(parse_hotkey("cmd+f13").is_err());
+        assert!(parse_hotkey("cmd+f21").is_err());
     }
 
     #[test]
