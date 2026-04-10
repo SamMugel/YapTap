@@ -496,6 +496,12 @@
       "title": "In src/hotkey.rs: extend parse_key() to handle f13–f20 function keys; spec (config.md) states f1–f20 are valid key tokens but only f1–f12 are implemented; a test already asserts 'cmd+f13' is an error, which should be updated to expect Ok",
       "implementation_status": "done",
       "notes": "f13-f20 implemented via rdev::Key::Unknown(u32) with macOS CGKeyCode values (105,107,113,106,64,79,80,90). rdev 0.5.3 lacks named F13-F20 variants. Tests updated to assert Unknown(n) values."
+    },
+    {
+      "id": "P3-T076",
+      "section": "menu-bar",
+      "title": "Add a 'Start Recording' / 'Stop Recording' toggle menu item to the tray dropdown as a clickable alternative to the global hotkey: when AppState is Idle show 'Start Recording'; when AppState is Recording show 'Stop Recording'; on click send AppEvent::HotkeyPressed over the existing sender so the state machine handles it identically to the hotkey; rebuild the menu with the correct label each time build_menu() is called (pass current AppState as a parameter)",
+      "implementation_status": "todo"
     }
   ]
 }
