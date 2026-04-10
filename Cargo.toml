@@ -24,3 +24,4 @@ arboard = "3"
 dirs = "5"
 cocoa = "0.25"
 objc = "0.2"
+image = { version = "0.24", default-features = false, features = ["png"] }

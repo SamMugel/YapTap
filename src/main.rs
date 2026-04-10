@@ -4,6 +4,12 @@
 /// transcription to `python3 src/core/transcribe.py <wav_path>`, and
 /// optionally pipes the transcript through an LLM via `python3 src/core/llm.py`.
 /// When invoked with no flags, launches the menu-bar app via `app::run_app()`.
+
+// Required so that objc's `msg_send!` macro (which expands to `sel!`) is
+// available in all modules, including `app.rs`.
+#[macro_use]
+extern crate objc;
+
 mod app;
 mod audio;
 mod config;
