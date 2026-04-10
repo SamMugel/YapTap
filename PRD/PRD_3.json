@@ -300,151 +300,153 @@
       "id": "P3-T043",
       "section": "prompt-menu",
       "title": "In the event loop `MenuEvent` handler: look up the clicked `MenuId` in `MenuIds`; dispatch to the appropriate handler (prompt selection, No Prompt, Open Config, or Quit)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T044",
       "section": "prompt-menu",
       "title": "On \"Open Config…\" `MenuEvent`: spawn `open ~/.config/yaptap/config.toml` as a subprocess",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T045",
       "section": "prompt-menu",
       "title": "On \"Quit YapTap\" `MenuEvent`: call `cleanup_and_exit()` (P3-T067)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T046",
       "section": "prompt-menu",
       "title": "On prompt item `MenuEvent`: update in-memory `config.selected_prompt` to the clicked stem; call `AppConfig::save_prompt(stem)`; call `load_prompts()` + `build_menu()` and set the new menu on the TrayIcon",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T047",
       "section": "prompt-menu",
       "title": "On \"No Prompt\" `MenuEvent`: set `selected_prompt` to \"\"; call `AppConfig::save_prompt(\"\")`; rebuild and set the updated menu",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T049",
       "section": "hotkey",
       "title": "In run_app(): call `AXIsProcessTrusted()` (P3-T010); if it returns false, call `show_alert()` with message \"YapTap needs Accessibility access to capture the global hotkey. Open System Settings → Privacy & Security → Accessibility?\" and buttons [\"Open Settings\", \"Later\"]; on \"Open Settings\" (button index 0) spawn `open \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\"`; skip hotkey registration",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T050",
       "section": "hotkey",
       "title": "If Accessibility permission is granted: spawn a background thread that calls `rdev::listen()` passing a callback; pass a clone of the `AppEvent` Sender into the callback closure; handle the `rdev::listen()` error return by sending the error back over the channel (P3-T051)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T051",
       "section": "hotkey",
       "title": "In the rdev callback: maintain a `HashSet<rdev::Key>` updated on `EventType::KeyPress` (insert) and `EventType::KeyRelease` (remove); on each `KeyPress` event, check whether the pressed-keys set contains all required modifiers and the main key from `ParsedHotkey`; only then send `AppEvent::HotkeyPressed` over the Sender",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T052",
       "section": "hotkey",
       "title": "If `rdev::listen()` returns an error: call `show_alert()` with message \"The hotkey '<configured-value>' could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.\"",
-      "implementation_status": "to do"
+      "implementation_status": "done",
+      "notes": "Partially implemented: rdev::listen() errors are logged to stderr but do not currently call show_alert()"
     },
     {
       "id": "P3-T068",
       "section": "error-handling",
       "title": "Register an app-mode SIGTERM handler via the ctrlc crate (termination feature): in app mode, call `cleanup_and_exit()`; ensure this does not overwrite the existing CLI-mode SIGINT handler (which exits 130) — gate the handler on whether run_app() was entered",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T069",
       "section": "error-handling",
       "title": "On audio capture error in app mode (cpal stream error callback fires): send `AppEvent::PipelineDone(Err(\"audio device error: <message>\"))` so the main loop transitions to Idle and shows an alert; delete temp WAV if present",
-      "implementation_status": "to do"
+      "implementation_status": "partial",
+      "notes": "Basic error handling in place via cpal stream error callback logging, but no explicit AppEvent::PipelineDone(Err(...)) from the stream error yet"
     },
     {
       "id": "P3-T054",
       "section": "state-machine",
       "title": "In the main event loop: on `AppEvent::HotkeyPressed`, read the current state; if Idle, call the start-recording handler; if Recording, call the stop-and-pipeline handler; if Processing, do nothing",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T055",
       "section": "state-machine",
       "title": "Start-recording handler: call `start_recording(None)` from src/audio.rs; store the returned `AudioHandle` in `shared.audio`; transition `AppState` to Recording; call `switch_icon(Active)`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T059",
       "section": "recording-pipeline",
       "title": "At the start of the pipeline thread: check that `python3` and `ffmpeg` are available on PATH; if either is absent, send `AppEvent::PipelineDone(Err(\"python3 not found\"))` or similar and return",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T060",
       "section": "recording-pipeline",
       "title": "In the pipeline thread: take the `AudioHandle` from `shared.audio` (lock + take); call `handle.stop_and_save()` to obtain the temp WAV path; propagate errors via `PipelineDone(Err(...))`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T061",
       "section": "recording-pipeline",
       "title": "In the pipeline thread: call `run_transcription(wav_path, &config.whisper_model, &shared.child)` to obtain the transcript; propagate errors via `PipelineDone(Err(...))`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T062",
       "section": "recording-pipeline",
       "title": "In the pipeline thread: if `config.selected_prompt` is non-empty, resolve `<binary_dir>/config/prompts/<stem>.toml`; call `run_llm_collect(transcript, prompt_path, &config.llm_model, &shared.child)`; propagate errors via `PipelineDone(Err(...))`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T063",
       "section": "recording-pipeline",
       "title": "In the pipeline thread: if `config.selected_prompt` is empty, use the raw transcript string as the output; send `AppEvent::PipelineDone(Ok(output))` on success",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T065",
       "section": "recording-pipeline",
       "title": "In the pipeline thread: delete the temp WAV file (if it exists) unconditionally after the pipeline completes — whether it succeeded, errored, or was abandoned",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T066",
       "section": "recording-pipeline",
       "title": "Wrap the entire pipeline thread body in `std::panic::catch_unwind`; on panic, send `AppEvent::PipelineDone(Err(\"internal error: pipeline panicked\"))` so the state machine always transitions back to Idle",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T056",
       "section": "state-machine",
       "title": "Stop-and-pipeline handler: transition `AppState` to Processing (icon stays Active); clone `shared` and the `AppEvent` Sender; spawn a pipeline background thread passing both",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T057",
       "section": "state-machine",
       "title": "In the main event loop: on `AppEvent::PipelineDone(Ok(output))`, write output to clipboard (P3-T063); transition to Idle; call `switch_icon(Idle)`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T064",
       "section": "recording-pipeline",
       "title": "In the main event loop on `PipelineDone(Ok(output))`: write the output string to the system clipboard via `arboard::Clipboard::new()?.set_text(output)`; propagate clipboard errors as an alert",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T058",
       "section": "state-machine",
       "title": "In the main event loop: on `AppEvent::PipelineDone(Err(msg))`, transition to Idle; call `switch_icon(Idle)`; call `show_alert()` with the error message",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T027",
       "section": "app-lifecycle",
       "title": "Implement the main event loop in `run_app()`: loop calling `NSRunLoop::currentRunLoop().runUntilDate_(NSDate::dateWithTimeIntervalSinceNow_(0.016))` via cocoa to pump OS events; after each iteration, drain `TrayIconEvent::receiver()`, `MenuEvent::receiver()`, and `app_event_rx` via `try_recv()` and dispatch to handler functions",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T070",
