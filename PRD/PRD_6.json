@@ -1,0 +1,134 @@
+{
+  "phase": 6,
+  "phase_name": "Start Recording Does Nothing — Root Cause Diagnosis and Fix",
+  "problem_statement": "After a new build, running `yaptap` opens the app and the menu renders, but clicking 'Start Recording' has no visible effect: the icon does not change to the active state, no recording starts, and no error alert appears. The hotkey (⌥Space) is unaffected by this issue (it uses a separate rdev thread). Only the menu button path is broken.",
+  "root_cause_analysis": "The event loop in run_app() drains TrayIconEvent BEFORE MenuEvent on each iteration (app.rs lines ~641, ~651). On macOS, when the user clicks the tray icon, the native NSMenu runs a modal event loop that blocks our nextEventMatchingMask: pump until the menu closes. When the user then clicks 'Start Recording', both a TrayIconEvent (the icon click) and a MenuEvent (the item click) queue up in their respective channels. On the next loop iteration: (1) TrayIconEvent fires first → build_menu() is called → a NEW menu is constructed with NEW MenuId values → menu_actions is replaced with the new map; (2) MenuEvent fires second → looks up event.id in menu_actions → the old MenuId is no longer present → returns None → no action dispatched → nothing happens. The send of AppEvent::HotkeyPressed never occurs, so recording never starts.",
+  "issues": [
+    {
+      "id": "P6-I001",
+      "category": "bug",
+      "title": "Process MenuEvent before TrayIconEvent in the event loop to prevent ID invalidation",
+      "description": "The event loop drains TrayIconEvent (which rebuilds the menu and replaces all MenuId values in menu_actions) before it drains MenuEvent. When both channels have events queued from the same user interaction (icon click → item click), the TrayIconEvent-triggered rebuild evicts the IDs from the displayed menu before MenuEvent is processed, causing every menu action to silently drop. Fix: move the MenuEvent drain loop to execute before the TrayIconEvent drain loop in run_app().",
+      "checks": [
+        "In app.rs run_app() event loop, confirm the MenuEvent drain (`while let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv()`) appears BEFORE the TrayIconEvent drain (`while let Ok(_event) = tray_icon::TrayIconEvent::receiver().try_recv()`).",
+        "Run `cargo build` and confirm exit 0.",
+        "Click 'Start Recording' in the menu — confirm the tray icon switches to the active (all-bars-equal) variant.",
+        "Click 'Stop Recording' in the menu — confirm the tray icon returns to idle."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I002",
+      "category": "bug",
+      "title": "Remove TrayIconEvent-triggered menu rebuild; rebuild proactively on state transitions instead",
+      "description": "Even after fixing the processing order (P6-I001), the TrayIconEvent handler still rebuilds the menu on every icon click, which regenerates MenuIds and unnecessarily risks future ordering bugs. Additionally, the spec (menubar.md) says prompts are 'refreshed each time the menu is opened' — a rebuild on TrayIconEvent is the right hook for this but it MUST happen after MenuEvent is drained. The safest approach is: keep the TrayIconEvent rebuild (for prompt refresh) BUT ensure it only runs AFTER MenuEvent drain (already fixed by P6-I001), AND also call rebuild_menu() after every AppState transition so the label ('Start Recording' / 'Stop Recording' / 'Processing…') is correct before the user opens the menu.",
+      "checks": [
+        "In the AppEvent::HotkeyPressed handler (Idle → Recording branch), add a `rebuild_menu()` call after switch_icon() so the menu label changes to 'Stop Recording'.",
+        "In the AppEvent::HotkeyPressed handler (Recording → Processing branch), add a `rebuild_menu()` call after setting state to Processing so the menu label changes to 'Processing…'.",
+        "In the AppEvent::PipelineDone handler, add a `rebuild_menu()` call after switch_icon() so the menu label returns to 'Start Recording'.",
+        "Run `cargo build` exit 0; run `cargo clippy -- -D warnings` clean.",
+        "Start recording → immediately open the menu → confirm label reads 'Stop Recording'.",
+        "Stop recording → wait for Processing → open menu → confirm label reads 'Processing…'.",
+        "After pipeline completes → open menu → confirm label reads 'Start Recording'."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I003",
+      "category": "diagnostic",
+      "title": "Add tracing::debug! to TrayIconEvent and MenuEvent handlers to make dispatch order observable",
+      "description": "In app mode, all tracing output goes to stderr which is invisible from Finder. To diagnose event dispatch issues, add structured tracing::debug! calls at the entry of both the TrayIconEvent and MenuEvent drain loops, and also at the point where the action is dispatched or not found. This makes it possible to run `RUST_LOG=debug ./target/debug/yaptap` in a terminal and observe the exact order events fire.",
+      "checks": [
+        "Add `tracing::debug!(\"TrayIconEvent received\")` at the top of the TrayIconEvent while-let body.",
+        "Add `tracing::debug!(menu_id = ?event.id, \"MenuEvent received\")` at the top of the MenuEvent while-let body.",
+        "Add `tracing::debug!(menu_id = ?event.id, action_found = menu_actions.contains_key(&event.id), \"MenuEvent dispatch\")` before the if-let-Some block.",
+        "Add `tracing::info!(state = ?state, \"HotkeyPressed — state transition\")` at the start of the AppEvent::HotkeyPressed handler.",
+        "Run `RUST_LOG=debug ./target/debug/yaptap`, click Start Recording, and confirm the log shows: TrayIconEvent, MenuEvent, dispatch action_found=true, HotkeyPressed state=Idle — in that order (after P6-I001 fix: MenuEvent before TrayIconEvent).",
+        "Run `cargo clippy -- -D warnings` clean."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I004",
+      "category": "bug",
+      "title": "Microphone (TCC) permission not pre-checked — start_recording() failure gives no microphone-specific guidance",
+      "description": "macOS requires microphone permission for CoreAudio capture (TCC framework). If denied, cpal's build_input_stream() may return an error or succeed but deliver silence. The current code calls show_alert('Recording Error', format!('Failed to start recording: {e}'), ...) on Err, but the error message from cpal is a low-level CoreAudio string that does not mention System Settings → Privacy & Security → Microphone. Users who have denied microphone permission see a confusing error or possibly nothing (if cpal returns an Ok with a silent stream). Fix: inspect the error string and prepend a microphone-specific hint when the error looks permission-related; also log with tracing::warn!.",
+      "checks": [
+        "In the Err(e) branch of the start_recording() call in app.rs, inspect e.to_string() for substrings 'permission', 'denied', 'not allowed', or '-536870174' (kAudioHardwareNotRunningError) and, if matched, show an alert: 'Microphone access is required for recording. Grant it in System Settings → Privacy & Security → Microphone, then restart YapTap.'",
+        "Add `tracing::warn!(error = %e, \"start_recording failed\")` before the show_alert call.",
+        "Test: revoke microphone permission in System Settings → Privacy & Security → Microphone for the yaptap binary, then click Start Recording → confirm a helpful alert appears.",
+        "Re-grant permission and confirm recording works normally."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I005",
+      "category": "diagnostic",
+      "title": "Document RUST_LOG=debug launch command for app-mode debugging in AGENT.md",
+      "description": "In app mode, stderr is invisible (no terminal). To observe tracing output, the binary must be launched from a terminal with RUST_LOG set. AGENT.md does not currently document this. Add a 'Debugging App Mode' section showing the exact command to launch with tracing.",
+      "checks": [
+        "Add the following entry to AGENT.md under a 'Debugging' section: `RUST_LOG=debug ./target/debug/yaptap` — launches app mode with full tracing output in the terminal.",
+        "Confirm AGENT.md does NOT contain any status report or summary (per rules)."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I006",
+      "category": "bug",
+      "title": "Input Monitoring permission required on macOS 14+ for rdev hotkey — diagnostic checklist",
+      "description": "On macOS 14+, rdev::listen() requires Input Monitoring permission in addition to Accessibility. Without it, rdev starts without error but the OS silently drops all keyboard events. The hotkey never fires, but the menu 'Start Recording' button still works (it sends AppEvent::HotkeyPressed directly, bypassing rdev). This issue does not cause 'Start Recording does nothing' but will prevent the ⌥Space hotkey from working on macOS 14+.",
+      "checks": [
+        "Run `sw_vers -productVersion`; if >= 14.0, proceed.",
+        "Open System Settings → Privacy & Security → Input Monitoring; confirm the yaptap binary is listed and checked.",
+        "If absent: run the binary from the terminal once with RUST_LOG=debug, then add it manually in the Input Monitoring pane.",
+        "Note: debug and release binaries have different paths (target/debug/ vs target/release/) and need separate entries.",
+        "After granting, quit and re-launch; confirm ⌥Space triggers recording (icon changes to active)."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I007",
+      "category": "bug",
+      "title": "Audio device error callback can fire spuriously after recording has already stopped",
+      "description": "The on_error closure registered with start_recording() is bound to the cpal Stream and can fire at any point until the stream is dropped. If the stream is dropped inside run_pipeline_inner() (via AudioHandle::stop_and_save()) and a device disconnect races with that drop, the closure fires and sends AppEvent::PipelineDone(Err(...)) to the channel after AppState has already been set to Idle. This produces a spurious 'audio device error' alert and a redundant Idle→Idle state transition. Fix: check state before sending the error event, or use an AtomicBool flag set to false when recording stops.",
+      "checks": [
+        "Introduce an `Arc<AtomicBool>` named `recording_active` alongside the AudioHandle. Set it to true when recording starts (Idle→Recording), set it to false when the pipeline thread takes the AudioHandle. In the on_error closure, only send PipelineDone(Err) if recording_active is true.",
+        "Run `cargo build` exit 0; run `cargo clippy -- -D warnings` clean.",
+        "Run `cargo test` — 10/10 pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I008",
+      "category": "bug",
+      "title": "Script path resolution (../../src/core/) breaks for cargo install and non-project-root launch",
+      "description": "transcribe_script_path() and llm_script_path() resolve scripts as `<binary_parent>/../../src/core/<script>`. For `target/debug/yaptap`, binary parent is `target/debug/`, so the resolved path is `project_root/src/core/<script>` — correct. For `~/.cargo/bin/yaptap` (cargo install), the resolved path is `~/src/core/<script>` — wrong. The fallback `src/core/<script>` is then used, which requires cwd == project root. In app mode, cwd is often `~` or `/`. Fix: also check the binary-relative path without the `../../` prefix (for side-by-side layouts) and fall back to `<binary_parent>/src/core/<script>` (for bundled installs).",
+      "checks": [
+        "In transcription.rs, update transcribe_script_path() to try, in order: (1) `<binary_parent>/../../src/core/transcribe.py` (dev build in target/debug or target/release), (2) `<binary_parent>/src/core/transcribe.py` (bundled install), (3) literal `src/core/transcribe.py` (cwd fallback). Return the first path whose parent directory exists.",
+        "Apply the same fix to llm_script_path() in llm.rs.",
+        "Run `cargo build` exit 0; run `cargo clippy -- -D warnings` clean.",
+        "Confirm from a different cwd: `cd /tmp && /path/to/target/debug/yaptap` — open the app, confirm no 'can't open file' error when the hotkey fires.",
+        "Run `cargo test` — 10/10 pass."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P6-I009",
+      "category": "verification",
+      "title": "End-to-end smoke test: Start Recording → Stop Recording → transcript on clipboard",
+      "description": "After all fixes in P6-I001 through P6-I008, run a full end-to-end verification that the menu-button recording path works correctly.",
+      "checks": [
+        "Run `RUST_LOG=info ./target/debug/yaptap` from the project root.",
+        "Confirm the tray icon appears (idle variant: outer bars shorter).",
+        "Click the tray icon → click 'Start Recording' → confirm icon switches to active (all bars equal).",
+        "Speak a word clearly into the microphone for 2 seconds.",
+        "Click the tray icon → click 'Stop Recording' → icon stays active (Processing state).",
+        "Wait for Processing to complete (icon returns to idle, no error alert).",
+        "Open any text editor → ⌘V → confirm the transcribed text has been pasted.",
+        "Click the tray icon → confirm menu label reads 'Start Recording' (back to Idle).",
+        "Click Quit YapTap → confirm process exits and lock file is removed (`ls ~/.config/yaptap/yaptap.lock` → no such file)."
+      ],
+      "status": "to do"
+    }
+  ]
+}
