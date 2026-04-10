@@ -160,6 +160,61 @@ impl AppConfig {
         (cfg, warnings)
     }
 
+    /// Atomically persist the config with `hotkey` set to `new_hotkey`.
+    ///
+    /// Follows the identical atomic write pattern as `save_prompt`: write to
+    /// `.tmp` then rename into place, with EXDEV fallback.
+    pub fn save_hotkey(&self, new_hotkey: &str) -> anyhow::Result<()> {
+        let mut updated = self.clone();
+        updated.hotkey = new_hotkey.to_string();
+
+        let path = config_path();
+        let tmp_path = path.with_extension("toml.tmp");
+
+        let contents = match toml::to_string_pretty(&updated) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not serialise config");
+                return Ok(());
+            }
+        };
+
+        if let Err(e) = std::fs::write(&tmp_path, &contents) {
+            tracing::warn!(
+                path = %tmp_path.display(),
+                error = %e,
+                "could not write config"
+            );
+            return Ok(());
+        }
+
+        if let Err(rename_err) = std::fs::rename(&tmp_path, &path) {
+            if rename_err.raw_os_error() == Some(libc_exdev()) {
+                if let Err(e) = std::fs::copy(&tmp_path, &path) {
+                    tracing::warn!(
+                        src = %tmp_path.display(),
+                        dst = %path.display(),
+                        error = %e,
+                        "could not copy config"
+                    );
+                    let _ = std::fs::remove_file(&tmp_path);
+                    return Ok(());
+                }
+                let _ = std::fs::remove_file(&tmp_path);
+            } else {
+                tracing::warn!(
+                    src = %tmp_path.display(),
+                    dst = %path.display(),
+                    error = %rename_err,
+                    "could not rename config"
+                );
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Atomically persist the config with `selected_prompt` set to `stem`.
     ///
     /// Writes to a `.tmp` sibling then renames into place.  Falls back to

@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::Child;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    mpsc, Arc, Mutex,
+    mpsc, Arc, Mutex, RwLock,
 };
 use std::thread;
 
@@ -57,16 +57,23 @@ struct SharedState {
     /// AudioHandle.  Guards the on_error closure so spurious post-stop errors
     /// from a racing cpal callback are silently dropped (P6-I006).
     recording_active: Arc<AtomicBool>,
+    /// The currently active parsed hotkey, shared with the rdev callback via
+    /// Arc<RwLock> so in-app hotkey changes take effect immediately without
+    /// restarting the rdev thread (P7-I012).
+    parsed_hotkey: Arc<RwLock<crate::hotkey::ParsedHotkey>>,
 }
 
 impl SharedState {
     #[allow(clippy::arc_with_non_send_sync)]
     fn new() -> Self {
+        let default_parsed = crate::hotkey::parse_hotkey("option+space")
+            .expect("default hotkey is always valid");
         Self {
             state: Arc::new(Mutex::new(AppState::Idle)),
             audio: Arc::new(Mutex::new(None)),
             child: Arc::new(Mutex::new(None)),
             recording_active: Arc::new(AtomicBool::new(false)),
+            parsed_hotkey: Arc::new(RwLock::new(default_parsed)),
         }
     }
 }
@@ -90,6 +97,7 @@ enum MenuAction {
     ToggleRecording,
     SelectPrompt(String),
     NoPrompt,
+    ChangeHotkey,
     OpenConfig,
     Quit,
 }
@@ -334,9 +342,10 @@ fn build_menu(
         tracing::warn!(error = ?e, "failed to append menu item");
     }
 
-    // ── Informational hotkey display (disabled) ───────────────────────────────
+    // ── Hotkey display / change (P7-I014) ────────────────────────────────────
     let hotkey_text = format!("Hotkey: {}", hotkey_display(&config.hotkey));
-    let hotkey_item = MenuItem::new(&hotkey_text, false, None);
+    let hotkey_item = MenuItem::new(&hotkey_text, true, None);
+    actions.insert(hotkey_item.id().clone(), MenuAction::ChangeHotkey);
     if let Err(e) = menu.append(&hotkey_item) {
         tracing::warn!(error = ?e, "failed to append menu item");
     }
@@ -496,7 +505,7 @@ pub fn run_app() {
     if !crate::hotkey::ax_is_process_trusted() {
         let btn = show_alert(
             "Accessibility Required",
-            "YapTap needs Accessibility access to capture the global hotkey.\n\nOpen System Settings \u{2192} Privacy & Security \u{2192} Accessibility?",
+            "YapTap needs Accessibility access to capture the global hotkey.\n\nOpen System Settings \u{2192} Privacy & Security \u{2192} Accessibility?\n\nAfter granting permission, quit and relaunch YapTap to activate the hotkey.",
             &["Open Settings", "Later"],
         );
         if btn == 0 {
@@ -507,6 +516,10 @@ pub fn run_app() {
     } else {
         match crate::hotkey::parse_hotkey(&config.hotkey) {
             Ok(parsed) => {
+                // Store the actual parsed hotkey in shared state so the main
+                // thread can update it live for in-app hotkey changes (P7-I012).
+                *shared.parsed_hotkey.write().unwrap() = parsed;
+                let hotkey_arc = Arc::clone(&shared.parsed_hotkey);
                 let tx = Arc::clone(&app_event_tx);
                 let hotkey_str = config.hotkey.clone();
                 thread::spawn(move || {
@@ -518,7 +531,14 @@ pub fn run_app() {
                     // P5-I008: tracks whether the main key is currently held,
                     // suppressing key-repeat events from firing multiple hotkeys.
                     let mut main_key_down = false;
+                    // P7-I009: one-shot log confirming the CGEventTap is live.
+                    // Declared here (thread::spawn closure scope) so it can be
+                    // referenced inside the nested rdev callback closure.
+                    static LISTEN_STARTED: std::sync::Once = std::sync::Once::new();
                     let result = rdev::listen(move |event| {
+                        // P7-I009: fires on the very first event of any type,
+                        // confirming the tap has started receiving events.
+                        LISTEN_STARTED.call_once(|| tracing::info!("rdev event tap active"));
                         match event.event_type {
                             rdev::EventType::KeyPress(key) => {
                                 pressed.insert(key);
@@ -529,6 +549,9 @@ pub fn run_app() {
                                 if effective_pressed.contains(&rdev::Key::AltGr) {
                                     effective_pressed.insert(rdev::Key::Alt);
                                 }
+                                // P7-I012: read parsed hotkey through RwLock so
+                                // in-app changes take effect immediately.
+                                let parsed = hotkey_arc.read().unwrap();
                                 let modifiers_held = parsed
                                     .modifiers
                                     .iter()
@@ -545,7 +568,11 @@ pub fn run_app() {
                             }
                             rdev::EventType::KeyRelease(key) => {
                                 pressed.remove(&key);
-                                if key == parsed.key {
+                                // P7-I007: reset main_key_down when the pressed
+                                // set becomes empty (all keys released).  This
+                                // recovers from a missed KeyRelease event that
+                                // would otherwise leave main_key_down stuck true.
+                                if pressed.is_empty() {
                                     main_key_down = false;
                                 }
                             }
@@ -668,6 +695,29 @@ pub fn run_app() {
                         let _ = config.save_prompt("");
                         let cur_state = shared.state.lock().unwrap().clone();
                         rebuild_menu(&tray, &mut menu_actions, &config, &cur_state);
+                    }
+                    MenuAction::ChangeHotkey => {
+                        // P7-I014: show input dialog, validate, apply live, persist.
+                        if let Some(new_hotkey) = prompt_hotkey_change(&config.hotkey) {
+                            match crate::hotkey::parse_hotkey(&new_hotkey) {
+                                Ok(new_parsed) => {
+                                    *shared.parsed_hotkey.write().unwrap() = new_parsed;
+                                    let _ = config.save_hotkey(&new_hotkey);
+                                    config.hotkey = new_hotkey;
+                                    let cur_state = shared.state.lock().unwrap().clone();
+                                    rebuild_menu(&tray, &mut menu_actions, &config, &cur_state);
+                                }
+                                Err(_) => {
+                                    show_alert(
+                                        "Invalid Hotkey",
+                                        &format!(
+                                            "Invalid hotkey: {new_hotkey}. Use format option+space or cmd+shift+y."
+                                        ),
+                                        &["OK"],
+                                    );
+                                }
+                            }
+                        }
                     }
                     MenuAction::OpenConfig => {
                         let _ = std::process::Command::new("open")
@@ -817,6 +867,82 @@ pub fn run_app() {
         // because all autoreleased objects from this iteration are in scope and
         // no references to them are held past this point.
         unsafe { let _: () = msg_send![pool, drain]; }
+    }
+}
+
+// ── Hotkey input dialog (P7-I014) ─────────────────────────────────────────────
+
+/// Show an NSAlert with an NSTextField pre-filled with `current`.
+///
+/// Returns `Some(new_value)` if the user clicked OK and entered a non-empty
+/// string, or `None` if they cancelled or left the field empty.
+fn prompt_hotkey_change(current: &str) -> Option<String> {
+    // Local C-compatible structs for NSRect / NSPoint / NSSize.  These match
+    // the AppKit layout exactly (two f64 fields each).
+    #[repr(C)]
+    struct NSPoint { x: f64, y: f64 }
+    #[repr(C)]
+    struct NSSize { width: f64, height: f64 }
+    #[repr(C)]
+    struct NSRect { origin: NSPoint, size: NSSize }
+
+    // SAFETY: All Cocoa objects are obtained from documented AppKit factory
+    // methods.  This function is only called from the main thread, satisfying
+    // AppKit's threading requirement.
+    unsafe {
+        let alert: id = msg_send![objc::class!(NSAlert), new];
+
+        let msg_cstr = CString::new(
+            "Enter new hotkey (e.g. option+space, cmd+shift+y):"
+        ).unwrap_or_default();
+        let msg_ns: id = msg_send![objc::class!(NSString), alloc];
+        let msg_ns: id = msg_send![msg_ns, initWithUTF8String: msg_cstr.as_ptr()];
+        let () = msg_send![alert, setMessageText: msg_ns];
+
+        // Create an NSTextField pre-filled with the current hotkey string.
+        let frame = NSRect {
+            origin: NSPoint { x: 0.0, y: 0.0 },
+            size: NSSize { width: 220.0, height: 24.0 },
+        };
+        let text_field: id = msg_send![objc::class!(NSTextField), alloc];
+        let text_field: id = msg_send![text_field, initWithFrame: frame];
+
+        let current_cstr = CString::new(current).unwrap_or_default();
+        let current_ns: id = msg_send![objc::class!(NSString), alloc];
+        let current_ns: id = msg_send![current_ns, initWithUTF8String: current_cstr.as_ptr()];
+        let () = msg_send![text_field, setStringValue: current_ns];
+
+        let () = msg_send![alert, setAccessoryView: text_field];
+
+        // OK button first (NSAlertFirstButtonReturn = 1000).
+        let ok_cstr = CString::new("OK").unwrap_or_default();
+        let ok_ns: id = msg_send![objc::class!(NSString), alloc];
+        let ok_ns: id = msg_send![ok_ns, initWithUTF8String: ok_cstr.as_ptr()];
+        let () = msg_send![alert, addButtonWithTitle: ok_ns];
+
+        // Cancel button second (NSAlertSecondButtonReturn = 1001).
+        let cancel_cstr = CString::new("Cancel").unwrap_or_default();
+        let cancel_ns: id = msg_send![objc::class!(NSString), alloc];
+        let cancel_ns: id = msg_send![cancel_ns, initWithUTF8String: cancel_cstr.as_ptr()];
+        let () = msg_send![alert, addButtonWithTitle: cancel_ns];
+
+        // Run modal and check result.
+        let response: isize = msg_send![alert, runModal];
+        if response != 1000 {
+            return None; // Cancelled or second button
+        }
+
+        // Read text from the field.
+        let value_ns: id = msg_send![text_field, stringValue];
+        let value_ptr: *const std::os::raw::c_char = msg_send![value_ns, UTF8String];
+        if value_ptr.is_null() {
+            return None;
+        }
+        let value = std::ffi::CStr::from_ptr(value_ptr)
+            .to_string_lossy()
+            .into_owned();
+
+        if value.is_empty() { None } else { Some(value) }
     }
 }
 
