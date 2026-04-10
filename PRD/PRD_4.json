@@ -2,93 +2,89 @@
   "phase": 4,
   "phase_name": "Hotkey Debugging & Spec Hardening",
   "problem_statement": "Menu bar opens correctly (tray icon visible, dropdown works) but the global hotkey (⌥Space by default) does not trigger recording.",
-  "note": "All issues below were identified by cross-referencing specs/, src/, and PRD_3.json. Status 'to do' means the root cause is unconfirmed at runtime or the fix has not been applied. Status 'done' means code review confirms the item is correctly implemented.",
+  "note": "All issues were identified by cross-referencing specs/, src/, and PRD_3.json. 'checks' are diagnostic steps to confirm the issue. 'status: to do' means unconfirmed at runtime or fix not applied; 'status: done' means code review confirms the item is correctly implemented and no action is needed.",
   "issues": [
     {
       "id": "P4-I001",
       "category": "permissions",
-      "title": "Accessibility permission not granted or app not in trust list",
-      "description": "rdev (CGEventTap) requires Accessibility permission. If AXIsProcessTrusted() returns false, the rdev thread is never spawned (src/app.rs:423–465). The menu still works because it is driven by tray-icon's NSStatusItem, which does not need Accessibility. The user may have clicked 'Later' on the alert, or the binary path changed since permission was granted.",
+      "title": "Accessibility permission not granted or app binary not in macOS trust list",
+      "description": "rdev requires Accessibility permission to install a CGEventTap. src/app.rs:423 calls ax_is_process_trusted(); if it returns false, the rdev thread is never spawned and the hotkey is permanently inactive. The menu still works because tray-icon's NSStatusItem does not need Accessibility. Causes: the user dismissed the 'Later' button on the launch alert, the binary path changed since permission was granted (e.g. recompile), or the entry is present but unchecked.",
       "checks": [
-        "Open System Settings → Privacy & Security → Accessibility; confirm 'yaptap' (or the full path to the binary) is listed and checked.",
-        "Run the binary from a terminal and observe whether the 'YapTap needs Accessibility access' alert fires at launch.",
-        "If listed but unchecked, check it; if absent, drag the binary into the list.",
-        "After granting, quit and re-launch — permission only takes effect after restart (per spec)."
+        "Open System Settings → Privacy & Security → Accessibility; confirm the yaptap binary is listed and its checkbox is checked.",
+        "If the binary is absent, drag the binary from target/release/ (or target/debug/) into the list.",
+        "If the checkbox was just checked, quit and re-launch (permission takes effect only after restart per spec).",
+        "Add a launch-time log: in run_app() before the AXIsProcessTrusted() check, emit `tracing::info!(trusted = crate::hotkey::ax_is_process_trusted(), \"accessibility trust\")` and confirm the value in Console.app."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I002",
       "category": "permissions",
-      "title": "Input Monitoring permission not granted (macOS 14 Sonoma +)",
-      "description": "Starting with macOS 14 (Sonoma), apps that read keyboard events system-wide via CGEventTap also need Privacy & Security → Input Monitoring permission. AXIsProcessTrusted() only checks Accessibility. If Input Monitoring is absent, CGEventTapCreate succeeds (so rdev::listen() starts) but the tap is silently disabled by the OS — no KeyPress events arrive, hotkey never fires.",
+      "title": "Input Monitoring permission not granted (macOS 14 Sonoma and later)",
+      "description": "On macOS 14+, apps must also have Privacy & Security → Input Monitoring permission to receive system-wide keyboard events via CGEventTap. ax_is_process_trusted() only checks Accessibility. If Input Monitoring is absent, CGEventTapCreate may succeed (rdev::listen() starts without error) but the OS silently delivers no events to the tap — the hotkey fires nothing and no error is logged.",
       "checks": [
-        "Check macOS version: `sw_vers -productVersion`. If >= 14.0, Input Monitoring applies.",
-        "Open System Settings → Privacy & Security → Input Monitoring; confirm 'yaptap' is listed and enabled.",
-        "If absent, grant it and restart the app.",
-        "Add a runtime check for this permission (TCC database query or test for a known false-positive key event).",
-        "Update the accessibility alert text to mention Input Monitoring as a second required permission on macOS 14+."
+        "Run `sw_vers -productVersion`; if >= 14.0, Input Monitoring applies.",
+        "Open System Settings → Privacy & Security → Input Monitoring; confirm yaptap is listed and enabled.",
+        "If absent: grant it and restart the app.",
+        "As a long-term fix, add a runtime check alongside the Accessibility check: query the TCC database or test for a synthetic event and emit a show_alert() if Input Monitoring appears absent."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I003",
       "category": "permissions",
-      "title": "Accessibility permission is granted but app was not restarted afterward",
-      "description": "The spec (hotkey.md) requires the user to re-launch after granting Accessibility permission. AXIsProcessTrusted() caches its result at process startup on some macOS versions; the rdev thread is not spawned unless permission was already granted when run_app() executed. The alert message (P3-T049) instructs the user to restart, but there is no enforcement.",
+      "title": "Accessibility permission was granted but the app has not been restarted",
+      "description": "ax_is_process_trusted() evaluates once at the start of run_app() (src/app.rs:423). If the user grants permission after launch, the rdev thread is not retroactively spawned. The spec (hotkey.md) requires the user to re-launch; the alert message in P3-T049 instructs this. However there is no runtime enforcement — the app silently stays without a hotkey thread.",
       "checks": [
-        "Confirm the user restarted after granting permission.",
-        "Add logging at app startup to print the result of ax_is_process_trusted() to stderr so it is visible in Console.app."
+        "Confirm the user quit and re-launched after granting permission, not just switched back to the app.",
+        "To confirm the rdev thread is alive: add `tracing::info!(\"rdev thread spawned\")` at src/app.rs:438 and check Console.app after launch."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I004",
       "category": "rdev",
-      "title": "rdev::listen() fails but only logs to stderr — no user-visible alert",
-      "description": "P3-T052 is marked partial. In src/app.rs:456–459, rdev::listen() errors are written to eprintln! only. The spec requires a show_alert() call explaining that the hotkey could not be registered. Without the alert, the user sees the menu bar icon but has no idea the hotkey is inactive — a silent failure.",
+      "title": "rdev::listen() error is only logged to stderr — no UI alert is shown (P3-T052 partial)",
+      "description": "If rdev::listen() returns an error (e.g. CGEventTapCreate failed due to permission denial or OS rejection), src/app.rs:456–459 calls eprintln! only. The spec (hotkey.md, P3-T052) requires show_alert() with the message 'The hotkey <configured-hotkey> could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.' Without the alert, the user sees a functional menu but a permanently inactive hotkey with no explanation. Note: show_alert() must be called from the main thread; the rdev thread must relay the error via the AppEvent channel rather than calling show_alert() directly.",
       "checks": [
-        "Inspect stderr in Console.app (filter by process 'yaptap') for a 'rdev listen error' message.",
-        "Implement the missing show_alert() call: after `if let Err(e) = result { eprintln!(...); }`, add show_alert() with the message from P3-T052.",
-        "Re-run; if a CGEventTap error surfaces, the message now appears as a dialog."
+        "Open Console.app, filter by process 'yaptap', and look for a 'rdev listen error' message on launch.",
+        "Implement the fix: add an AppEvent::HotkeyError(String) variant to the AppEvent enum; in the rdev thread's error branch send AppEvent::HotkeyError(e.to_string()); in the main loop match arm call show_alert() with the spec-required message.",
+        "Verify the alert appears when the binary is launched without Accessibility permission."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I005",
       "category": "rdev",
-      "title": "rdev::listen() runs on a background thread — may need a CFRunLoop in some rdev versions",
-      "description": "rdev::listen() on macOS internally calls CFRunLoopGetCurrent() and CFRunLoopRun() in the calling thread. When called from a thread spawned with std::thread::spawn, a new CFRunLoop is created for that thread. In some rdev versions, if the event tap source is not added to the main thread's run loop, the OS may not deliver events reliably (particularly under NSApp activation policy changes). This is version-dependent.",
+      "title": "rdev::listen() is called from a std::thread::spawn background thread — CFRunLoop must self-start",
+      "description": "rdev::listen() on macOS creates a CGEventTap, adds it to CFRunLoopGetCurrent(), and calls CFRunLoopRun(). When invoked from a thread spawned with std::thread::spawn, the thread has its own CFRunLoop which is not running until CFRunLoopRun() is called inside rdev::listen(). This is the correct pattern and should work, but on some rdev versions or macOS releases, the event tap may require the main thread's run loop to be involved.",
       "checks": [
-        "Check rdev version in Cargo.lock: `grep -A1 'name = \"rdev\"' Cargo.lock`.",
-        "Review rdev 0.5 macOS source to confirm it calls CFRunLoopRun() on its own thread.",
-        "As a test, temporarily log a message every 5 seconds from the rdev thread to confirm it is alive (CFRunLoop is spinning).",
-        "If events are not arriving, test calling rdev::listen() from the main thread (before the tray icon loop) to isolate the issue."
+        "Check the rdev version in Cargo.lock (`grep -A2 'name = \"rdev\"' Cargo.lock`) and compare with rdev 0.5 release notes.",
+        "Add a heartbeat log in the rdev callback (`tracing::trace!(\"rdev alive\")` on every nth event) to confirm the thread is running and receiving events.",
+        "As a smoke test: add a temporary `EventType::MouseMove` listener to the same callback and confirm mouse moves arrive — this rules out the run loop being stuck."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I006",
       "category": "rdev",
-      "title": "rdev 0.5 CGEventTap compatibility with macOS 13–15",
-      "description": "CGEventTap behaviour has changed across macOS versions (Ventura, Sonoma, Sequoia). rdev 0.5 was released before macOS 15 (Sequoia) and may have bugs or incompatibilities. CGEventTap at kCGHIDEventTap level is more restricted than kCGSessionEventTap in newer OS versions for apps without a proper bundle.",
+      "title": "rdev 0.5 compatibility with macOS 13–15",
+      "description": "CGEventTap behaviour has changed across macOS Ventura (13), Sonoma (14), and Sequoia (15). rdev 0.5 predates macOS 15 and may have known incompatibilities. Additionally, unsigned CLI binaries (running from target/release/) are treated differently than .app bundles by the TCC permission system.",
       "checks": [
-        "Check current macOS version: `sw_vers -productVersion`.",
-        "Check rdev changelog/issues for known macOS 13–15 problems.",
-        "Consider upgrading rdev or switching to a direct CGEventTap implementation if rdev is the source of the problem.",
-        "Test with a minimal rdev example to see if key events are received at all outside of yaptap."
+        "Run `sw_vers -productVersion` and search the rdev GitHub issues for the exact macOS version.",
+        "Test whether a minimal standalone rdev example (outside yaptap) receives keyboard events on the same machine.",
+        "If rdev is the root cause, evaluate upgrading to a newer rdev version or replacing it with a direct CGEventTap implementation using the objc/cocoa crates already in the project."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I007",
       "category": "rdev",
-      "title": "CGEventTap silently disabled in secure input fields",
-      "description": "macOS disables HID-level event taps when the user is in a secure text field (password prompt, 1Password, Terminal sudo, etc.). CGEventTapCreate succeeds but the tap receives no events. rdev::listen() will not return an error; it simply stops delivering KeyPress events for the duration. This is a macOS security feature and cannot be worked around.",
+      "title": "CGEventTap silently receives no events while a secure input field is focused",
+      "description": "macOS disables HID-level event taps whenever a secure text field (password prompt, sudo in Terminal, 1Password unlock, etc.) is focused. CGEventTapCreate succeeds; rdev::listen() returns no error; but no KeyPress events arrive for the duration of the secure field focus. This is a macOS security feature and cannot be worked around.",
       "checks": [
-        "Reproduce the hotkey failure: confirm no secure input field is active in the focused app.",
-        "Document this known limitation in the config comment or a README.",
-        "Optionally detect the condition via CGEventTapIsEnabled() and surface it as a status indicator."
+        "Reproduce the failure: confirm no password prompt or secure input field is active in any focused app at the time the hotkey is pressed.",
+        "Document this known limitation in a code comment at the rdev thread spawn site (src/app.rs:438)."
       ],
       "status": "to do"
     },
@@ -96,172 +92,217 @@
       "id": "P4-I008",
       "category": "key-matching",
       "title": "Right Option key maps to rdev::Key::AltGr, not Key::Alt",
-      "description": "In src/hotkey.rs:47–54, parse_modifier(\"option\") returns rdev::Key::Alt, which corresponds to the LEFT Option key (hardware keycode 58). The right Option key (keycode 61) maps to rdev::Key::AltGr in rdev. If the user presses the RIGHT Option key, the modifier check fails and HotkeyPressed is never sent.",
+      "description": "src/hotkey.rs:47–54: parse_modifier(\"option\") returns rdev::Key::Alt, which is hardware keycode 58 (left Option). Hardware keycode 61 (right Option) maps to rdev::Key::AltGr in rdev's macOS backend. If the user presses the right ⌥Option key, the modifier check in src/app.rs:444 fails and HotkeyPressed is never sent.",
       "checks": [
-        "Test with LEFT ⌥Option (left of spacebar) vs RIGHT ⌥Option (right of spacebar).",
-        "If only left Option works, add rdev::Key::AltGr as an alias for 'option' in parse_modifier(), or change the check to match either Alt or AltGr when 'option' is specified.",
-        "Alternatively, keep the left-only behavior but document it clearly."
+        "Test with the LEFT ⌥Option key (left of spacebar) vs the RIGHT ⌥Option key (right of spacebar) — does only one work?",
+        "Fix: in parse_modifier(), return a new two-element vec or change the matching logic to treat both Alt and AltGr as satisfying an 'option' modifier. One approach: extend ParsedHotkey.modifiers to a set and add both Key::Alt and Key::AltGr when 'option' is parsed."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I009",
       "category": "key-matching",
-      "title": "Key auto-repeat causes double HotkeyPressed on a single physical press",
-      "description": "In src/app.rs:441–448, AppEvent::HotkeyPressed is sent on every KeyPress event where the hotkey combo is held. macOS sends repeated KeyPress events while a key is held (~10–30 Hz). For ⌥Space: pressing and briefly holding sends dozens of HotkeyPressed events in rapid succession, causing Idle→Recording then immediately Recording→Processing before the user releases the key.",
+      "title": "Key auto-repeat fires multiple HotkeyPressed events per physical press",
+      "description": "The rdev callback in src/app.rs:441–449 sends AppEvent::HotkeyPressed on every KeyPress event where the hotkey combo is satisfied. macOS sends repeated KeyPress events (~10–30 Hz) while a key is held. For ⌥Space, holding the combo for even 100 ms sends several events, causing Idle→Recording followed immediately by Recording→Processing before the user releases the key. Fix: track a 'hotkey armed' boolean in the rdev closure; set it to false when the main key is pressed (leading edge); reset it to true on KeyRelease of the main key. Fire HotkeyPressed only on the leading edge (armed == true transition to false).",
       "checks": [
-        "Hold ⌥Space for 1 second and observe whether the app immediately transitions to Processing without the user releasing the key.",
-        "Fix: add a debounce flag. Track whether the hotkey was already active (main key still in `pressed`). Only fire on the first KeyPress of the main key; require a KeyRelease before re-arming.",
-        "Alternative fix: gate on `!pressed.contains(&parsed.key)` before inserting, so the event fires only on the leading edge."
+        "Hold ⌥Space for ~300 ms and observe whether the app transitions directly to Processing without the user releasing the key.",
+        "Add a counter to the rdev callback and log how many HotkeyPressed events are sent per physical keypress."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I010",
       "category": "key-matching",
-      "title": "HashSet sticky keys — Key::Alt may not be removed on release in some rdev versions",
-      "description": "In src/app.rs:452–454, rdev::EventType::KeyRelease removes the key from `pressed`. If rdev misses a KeyRelease event (possible with CGEventTap drops under load, or when the app loses focus briefly), Alt stays in the set permanently. Subsequent HotkeyPressed events fire as soon as Space is pressed alone, without needing to hold Option again. The reverse — Alt stuck as NOT pressed — would silently suppress all hotkey events.",
+      "title": "HashSet 'sticky key' — Key::Alt may stay in pressed set if its KeyRelease is missed",
+      "description": "src/app.rs:452–454: rdev::EventType::KeyRelease removes the key from the pressed HashSet. If rdev drops a KeyRelease event (possible under CGEventTap load, when the app switches focus briefly, or during macOS sleep/wake), Key::Alt stays in the set permanently. Consequence: the hotkey then fires on every subsequent Space press alone, without requiring Option to be held. The reverse (Alt release missed so it never re-enters pressed) would silently suppress the hotkey.",
       "checks": [
-        "Use Console.app or add eprintln! tracing in the rdev callback to log all KeyPress and KeyRelease events for Alt and Space.",
-        "Test whether pressing Option, switching apps, releasing Option, and switching back leaves Alt stuck in the set.",
-        "As a mitigation, implement a timeout: clear `pressed` if no key events arrive for >5 seconds, or on FocusOut equivalent."
+        "Enable tracing in the rdev callback to log every KeyPress/KeyRelease for Key::Alt and Key::Space.",
+        "Test: press and release Option repeatedly while watching the logs; confirm no unbalanced insertions accumulate.",
+        "Mitigation: clear the pressed HashSet on any event whose type is not KeyPress or KeyRelease (e.g. on mouse click or focus change event if rdev surfaces one), or implement a maximum staleness timer."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I011",
       "category": "key-matching",
-      "title": "HotkeyPressed fires when modifier is pressed after main key",
-      "description": "The check in src/app.rs:444–448 fires whenever a KeyPress is received and both modifier and main key are in `pressed`. If the user presses Space first (inserted into pressed, modifiers not yet held — no fire), then presses Option (inserted; now both in pressed — FIRES), the hotkey triggers on the Option keydown, not the Space keydown. This is an edge case but could cause accidental recordings when typing Option combinations.",
+      "title": "Hotkey fires when modifier is pressed after main key (out-of-order press)",
+      "description": "The check at src/app.rs:444–448 fires on every KeyPress event where the full hotkey set is satisfied. If the user presses Space first (no modifier yet — no fire), then presses Option (both now in pressed — fires on the Option KeyPress), the hotkey triggers unexpectedly. This can cause accidental recordings when typing Option+character combinations in other apps if Space happens to be physically held. Fix: change the check to fire only when the key that was just pressed equals parsed.key (the main key), not when a modifier is pressed.",
       "checks": [
-        "Test by pressing Space then Option — does the app start recording?",
-        "Fix: only fire the event when the key that was just pressed is `parsed.key` (the main key), not when it is a modifier. Change the check to: `if modifiers_held && key == parsed.key { send }` instead of checking `pressed.contains(&parsed.key)`."
+        "Test: with another app focused, hold Space then press Option — does yaptap start recording?",
+        "The fix is a one-line change: replace `if modifiers_held && pressed.contains(&parsed.key)` with `if modifiers_held && key == parsed.key` (using the key variable from the outer KeyPress match arm)."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I012",
       "category": "main-loop",
-      "title": "AppEvent channel not drained during show_alert (modal dialog blocks main loop)",
-      "description": "show_alert() calls `msg_send![alert, runModal]` (src/app.rs:118), which blocks the main event loop thread until the user dismisses the dialog. During this time, app_event_rx.try_recv() is not called, so HotkeyPressed events queue up in the channel. After dismissal, all queued events are dispatched at once, potentially causing rapid state transitions. More critically, if a pipeline error alert is showing when the user presses the hotkey again, the press is queued and fires immediately after OK.",
+      "title": "AppEvent channel is not drained during show_alert modal — queued hotkey presses execute on dismiss",
+      "description": "show_alert() calls `msg_send![alert, runModal]` (src/app.rs:118), which blocks the main thread. During this block, app_event_rx.try_recv() (src/app.rs:550) is not called. HotkeyPressed events accumulate in the channel. When the alert is dismissed, all queued events are dispatched in a tight loop, potentially starting a recording immediately after the user clicks OK on an error dialog.",
       "checks": [
-        "Dismiss an error alert and observe whether the app immediately starts recording (leftover queued HotkeyPressed).",
-        "Fix: drain (and discard) the app_event_rx channel after runModal returns, before resuming the main loop."
+        "Trigger a pipeline error alert; press ⌥Space while the alert is open; dismiss the alert and observe whether the app immediately starts recording.",
+        "Fix: after each runModal call returns, drain app_event_rx with a while-let discard loop before continuing the main event loop."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I013",
       "category": "pipeline",
-      "title": "transcription.py and llm.py resolved as relative paths — fail in app mode",
-      "description": "In src/transcription.rs:28 and src/llm.rs:33, the subprocess commands use `cmd.arg(\"src/core/transcribe.py\")` and `cmd.arg(\"src/core/llm.py\")` — relative paths. In CLI mode launched from the project root, these resolve correctly. In app mode (launched from /Applications, Finder, or login items), the working directory is typically `/` or the user's home, so the paths do not resolve and the subprocesses fail immediately. This does not affect the hotkey itself but breaks the complete pipeline after recording stops.",
+      "title": "transcription.py and llm.py are referenced by relative paths — fail in app mode",
+      "description": "src/transcription.rs:28 uses `cmd.arg(\"src/core/transcribe.py\")` and src/llm.rs:33 uses `cmd.arg(\"src/core/llm.py\")`. These paths are relative to the process working directory, which in app mode (launched from Finder, login items, or launchd) is typically `/` or `~`, not the project root. The subprocesses fail to spawn, producing a pipeline error after the first hotkey cycle. The hotkey itself fires correctly, but the pipeline always errors.",
       "checks": [
-        "In app mode, press the hotkey twice and observe the error alert. The message 'transcription failed' or a spawn error indicates this issue.",
-        "Fix: resolve the script paths relative to the binary location using `std::env::current_exe().parent()`, mirroring the prompts_dir() logic in config.rs.",
-        "Alternatively, embed the Python scripts as compile-time strings and write them to a temp file, or convert them to a bundled resource."
+        "Press ⌥Space twice in app mode and observe the error alert. The message will be a spawn error or 'python3: can't open file' — confirm this.",
+        "Fix: resolve the script paths relative to the binary using `std::env::current_exe()?.parent()?.join(\"../src/core/transcribe.py\")` (development layout) or embed scripts as resources in a production bundle. Mirror the prompts_dir() logic in config.rs which already handles the binary-relative fallback."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I014",
       "category": "spec-compliance",
-      "title": "P3-T052 partial: rdev error not surfaced as a UI alert",
-      "description": "The spec (hotkey.md, P3-T052) requires show_alert() when rdev::listen() returns an error, with the message 'The hotkey \\\"<configured-hotkey>\\\" could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.' The implementation (src/app.rs:456–459) only calls eprintln!, leaving the user with a silent, non-functional hotkey and no guidance.",
+      "title": "AppConfig::load() uses eprintln! for user-facing config errors instead of show_alert() (P3-T017, P3-T018)",
+      "description": "The spec (config.md, P3-T017/18) requires show_alert() dialogs when the config TOML fails to parse or the hotkey value is invalid. src/config.rs:114–133 uses eprintln! only. In app mode, stderr is invisible to the user. The hotkey silently resets to 'option+space' with no notification. Note: AppConfig::load() is called before NSApplication is fully initialised (before finishLaunching), so show_alert() cannot be called from within load() itself. Fix: return parse/validation warnings alongside the config struct (e.g. a Vec<String> of deferred messages), then show_alert() for each in run_app() after finishLaunching.",
       "checks": [
-        "Check stderr in Console.app for 'rdev listen error' when launching.",
-        "Implement show_alert() in the rdev error branch — this requires sending the error back to the main thread (not calling show_alert from the rdev thread) since NSAlert must be called on the main thread.",
-        "Suggested fix: send a new AppEvent variant (e.g. AppEvent::HotkeyError(String)) from the rdev thread; handle it in the main loop by calling show_alert()."
+        "Introduce a syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears.",
+        "Implement the deferred-alert pattern described above and re-test."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I015",
       "category": "spec-compliance",
-      "title": "P3-T017/T018: AppConfig::load() uses eprintln! instead of show_alert() for config errors",
-      "description": "The spec (config.md, P3-T017) says TOML parse errors and invalid hotkey values should show a show_alert() dialog. AppConfig::load() in src/config.rs:114–133 uses eprintln! only. This means if the user has a malformed config file, errors are silent in the menu bar app. The hotkey silently resets to 'option+space' without user notification.",
+      "title": "P3-T069 partial: cpal stream error callback does not send AppEvent::PipelineDone(Err) — app stays in Recording state",
+      "description": "The spec requires that when the cpal stream error callback fires (audio device lost, driver crash, etc.), the app transitions to Idle and shows an alert. src/audio.rs:127–129 calls tracing::error! only. No AppEvent is sent to the main loop, so the state machine stays in Recording indefinitely. Fix: pass a Sender<AppEvent> into start_recording(); in the error callback send AppEvent::PipelineDone(Err(format!(\"audio device error: {e}\"))).",
       "checks": [
-        "Introduce an intentional syntax error in ~/.config/yaptap/config.toml and launch the app. No alert appears — confirm this.",
-        "Fix: AppConfig::load() cannot call show_alert() directly because NSApplication may not be ready when load() is called (it's called before finishLaunching in some code paths). Options: (a) return the error as a String alongside AppConfig and show the alert after finishLaunching; (b) defer config validation to after NSApp setup."
+        "Simulate a device loss (unplug a USB mic or disable the device in Audio MIDI Setup) while recording.",
+        "Confirm the icon does NOT return to Idle and no alert appears — reproducing the bug.",
+        "After the fix, repeat the test and confirm the icon returns to Idle with an error alert."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I016",
       "category": "spec-compliance",
-      "title": "P3-T069 partial: audio device errors in cpal callback do not transition state to Idle",
-      "description": "The spec requires that when the cpal stream error callback fires, AppEvent::PipelineDone(Err(...)) is sent so the main loop transitions back to Idle and shows an alert. In src/audio.rs:127–129, the error callback only calls tracing::error!. No AppEvent is sent. The app stays in Recording state permanently if the device is lost.",
+      "title": "P3-T024 task title says NSApplicationActivationPolicyProhibited but correct policy is Accessory — update PRD_3.json",
+      "description": "The title of P3-T024 in PRD_3.json says 'set the NSApplication activation policy to NSApplicationActivationPolicyProhibited'. The code in src/app.rs:395 correctly uses policy 1 (Accessory), as the comment explains: Prohibited (2) prevents all UI event processing and would break the menu. The implementation is correct per menubar.md. The PRD_3 task title is misleading and should be corrected to prevent future confusion.",
       "checks": [
-        "Simulate a device loss (unplug USB mic or disable the device in Audio MIDI Setup while recording). The icon should return to Idle with an alert — verify it does not.",
-        "Fix: pass a Sender<AppEvent> into start_recording() and have the error callback send AppEvent::PipelineDone(Err(format!(\"audio device error: {e}\")))."
+        "Edit PRD_3.json P3-T024 title to: 'In run_app(): set the NSApplication activation policy to NSApplicationActivationPolicyAccessory (1) via the cocoa crate so no Dock icon appears but menu-bar clicks are still processed'.",
+        "Confirm the app still launches with no Dock icon and a working menu after the documentation-only change."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I017",
       "category": "spec-compliance",
-      "title": "P3-T024 spec title mismatch: code correctly uses NSApplicationActivationPolicyAccessory, not Prohibited",
-      "description": "P3-T024's title says 'set activation policy to NSApplicationActivationPolicyProhibited', but the comment in src/app.rs:389–398 correctly explains that Prohibited (2) prevents all UI events (menus never open) and that Accessory (1) is the right policy. The code uses 1 (Accessory). The PRD title is wrong; the implementation is correct per menubar.md.",
+      "title": "P3-T006 incomplete: CLI audio path in main.rs still uses inline cpal code instead of audio::start_recording()",
+      "description": "P3-T006 (status 'to do' in PRD_3.json) requires the CLI path in main.rs to call audio::start_recording() / stop_and_save() from src/audio.rs. main.rs currently contains its own duplicate inline cpal stream setup (~lines 200–484). Any bug fixed in audio.rs is not reflected in CLI mode, and the two implementations can diverge silently.",
       "checks": [
-        "Verify: the app shows no Dock icon (Accessory) and the menu opens (not Prohibited). Both are true per user report.",
-        "Update P3-T024 title in PRD_3.json to say NSApplicationActivationPolicyAccessory so the PRD accurately reflects the intent."
+        "Confirm main.rs contains `device.build_input_stream` (it does, around line 310) — duplicate of audio.rs.",
+        "Refactor main.rs CLI path: replace the inline capture block with `let handle = audio::start_recording(args.device)?;`, block on stdin Enter via read_line, then `let wav_path = handle.stop_and_save()?;`."
       ],
-      "status": "done"
+      "status": "to do"
     },
     {
       "id": "P4-I018",
-      "category": "spec-compliance",
-      "title": "P3-T006 incomplete: CLI audio path still uses old inline capture, not AudioHandle from audio.rs",
-      "description": "P3-T006 (status 'to do' in PRD_3) requires the CLI mode in main.rs to use start_recording() / stop_and_save() from src/audio.rs. Currently, main.rs contains its own inline duplicate audio capture pipeline (lines ~200–484). This means bug fixes in audio.rs are not reflected in CLI mode. Not a hotkey issue, but creates code drift.",
+      "category": "icon",
+      "title": "Tray icon not marked as a macOS template image — may not invert correctly on dark menu bar",
+      "description": "The spec (menubar.md) requires the PNG icons to be template images so the system inverts them automatically for dark and light menu bar themes. tray_icon::Icon::from_rgba() (src/app.rs:183) creates a raw RGBA icon; it does not set the NSImage templateImage flag. Without the flag, the icon always renders its literal bitmap pixels — a dark icon on a dark menu bar becomes invisible.",
       "checks": [
-        "Confirm main.rs still has its own cpal stream setup (look for `device.build_input_stream` in main.rs — it is present at line ~310).",
-        "Refactor main.rs CLI path to call audio::start_recording(args.device), block on stdin, then audio::stop_and_save()."
+        "Switch the macOS menu bar to dark mode (System Settings → Appearance → Dark) and observe the yaptap icon.",
+        "If invisible or wrong colour, retrieve the NSStatusItem's NSImage after building the TrayIcon (via unsafe objc) and call `setTemplate:YES` on it.",
+        "Alternatively, check whether the tray-icon 0.14 API exposes a template-image flag and use it."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I019",
-      "category": "icon",
-      "title": "Tray icon not marked as a macOS template image — may appear solid black on light menu bar",
-      "description": "The spec (menubar.md) requires the icon to be a PNG template image so the system automatically inverts it for light/dark menu bars. tray-icon creates the icon via from_rgba(), which does not set the NSImage template flag. Without the template flag, the icon always appears as the raw bitmap — dark on light menu bars, potentially invisible on dark menu bars.",
+      "category": "hotkey",
+      "title": "Option+Space may conflict with a system or third-party shortcut consuming the event upstream",
+      "description": "The spec notes that rdev's CGEventTap is passive (does not suppress the event). However, if another app installs a consuming CGEventTap at the same or higher tap level before rdev, it may intercept and suppress Option+Space before rdev's tap sees it. Common sources: Alfred, Raycast, or System Settings → Keyboard → Keyboard Shortcuts assignments for ⌥Space.",
       "checks": [
-        "Observe the menu bar icon on both light and dark menu bar themes.",
-        "If the icon does not invert correctly, set the template flag via objc: after building the TrayIcon, obtain its NSStatusItem and call `[[statusItem button] image] setTemplate:YES`.",
-        "Alternatively, use pre-inverted icons for each theme or rely on tray-icon's template support if the version supports it."
+        "Open System Settings → Keyboard → Keyboard Shortcuts; search for any ⌥Space binding.",
+        "Temporarily quit Alfred / Raycast / any launcher app and test the hotkey.",
+        "Test with an alternative hotkey (e.g. cmd+shift+y set in ~/.config/yaptap/config.toml) to rule out a key-specific conflict."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I020",
-      "category": "key-matching",
-      "title": "Option+Space may conflict with system-level shortcuts (Spotlight, Alfred, etc.)",
-      "description": "Option+Space is the default shortcut for some third-party launchers (e.g., Alfred). The spec notes that rdev's CGEventTap is passive (does not suppress the event), so both apps receive it. However, if a consuming event tap installed by another app intercepts the event BEFORE rdev's tap, rdev may not see it.",
+      "category": "hotkey",
+      "title": "No visual feedback between first hotkey press and recording start — hard to diagnose silent failures",
+      "description": "Between the first ⌥Space press and the icon switching to active, there is no immediate feedback to confirm the hotkey was received. If start_recording() fails silently or the icon switch fails, the user has no signal that the press was registered. This makes it difficult to distinguish 'hotkey not received' from 'hotkey received but recording failed'.",
       "checks": [
-        "Check System Settings → Keyboard → Keyboard Shortcuts for any conflicting ⌥Space assignment.",
-        "Disable Alfred / any other launcher temporarily and test the hotkey.",
-        "Test with a different, unambiguous hotkey such as cmd+shift+y in config.toml."
+        "Press ⌥Space once and observe whether the icon changes to the active (three equal bars) variant within ~100 ms.",
+        "If the icon never changes, the problem is upstream (hotkey not delivered to the main loop); if it changes but returns to idle quickly, the pipeline is failing.",
+        "Add `tracing::info!(\"hotkey received, state = {:?}\", state)` at src/app.rs:552 to make hotkey delivery visible in Console.app without needing a UI change."
       ],
       "status": "to do"
     },
     {
       "id": "P4-I021",
-      "category": "rdev",
-      "title": "rdev callback fires on the event tap thread — show_alert must not be called from it",
-      "description": "The rdev callback closure captures `tx: Arc<Sender<AppEvent>>` and sends over an mpsc channel — this is correct. However, if a future maintainer adds a direct NSAlert call inside the rdev callback, it would crash because NSAlert (Cocoa) must be called from the main thread. This is a latent correctness risk.",
+      "category": "safety",
+      "title": "rdev callback closure must never call Cocoa APIs — no SAFETY comment documents this constraint",
+      "description": "The rdev callback in src/app.rs:441–454 correctly sends events over an mpsc channel rather than calling show_alert() or any other Cocoa API. However, the constraint is undocumented. A future maintainer adding diagnostic logic inside the callback might inadvertently call msg_send! or show_alert(), which would crash because NSAlert and other AppKit calls must run on the main thread. Per rust-safety.mdc, unsafe contracts must be documented at the site of the constraint.",
       "checks": [
-        "Confirm no show_alert() calls are present inside the rdev::listen() callback — currently they are not (correct).",
-        "Add a code comment in the rdev callback closure (src/app.rs:441) warning that all Cocoa calls are forbidden here; UI feedback must go via the AppEvent channel."
+        "Confirm no show_alert() or msg_send! calls exist inside the rdev::listen() callback — they do not (correct).",
+        "Add a code comment above the callback closure: `// SAFETY: This closure runs on the rdev CGEventTap thread. No Cocoa/AppKit calls are permitted here. All UI feedback must go via the AppEvent channel.`"
       ],
-      "status": "done"
+      "status": "to do"
     },
     {
       "id": "P4-I022",
-      "category": "pipeline",
-      "title": "No visual feedback between first hotkey press and recording start",
-      "description": "The state transition Idle→Recording calls switch_icon() and start_recording(). If start_recording() fails (e.g., no microphone), show_alert() is called, but between the first hotkey press and the alert there is a brief window with no feedback. If start_recording() succeeds, the icon switches to active. This is per spec, but if icon switching is broken, the user has no confirmation the hotkey fired.",
+      "category": "rules-violation",
+      "title": "eprintln!/println! used for internal diagnostics — violates rust-tracing.mdc",
+      "description": "rust-tracing.mdc rule: 'Never use println! or eprintln! for observability.' In app mode, stderr is not visible to the user (Console.app requires manual filtering). Internal diagnostic messages must use the tracing crate so they are controlled by RUST_LOG and visible in structured log output. Affected sites: src/config.rs has ~8 eprintln! calls for config warnings; src/app.rs:457 uses eprintln! for the rdev error. Note: user-facing messages (alerts) correctly use show_alert() — the concern is internal-only diagnostic output.",
       "checks": [
-        "Press ⌥Space and observe whether the menu bar icon changes to the 'active' (all three bars equal height) variant.",
-        "If the icon does not change but the pipeline eventually runs, the issue is icon switching, not hotkey delivery.",
-        "Check switch_icon() in src/app.rs and confirm tray.set_icon() succeeds (add error logging if needed)."
+        "Search for eprintln!/println! in src/: `grep -rn 'eprintln!\\|println!' src/`.",
+        "Replace each diagnostic eprintln! with the appropriate tracing level: config warnings → `tracing::warn!`, rdev errors → `tracing::error!`, using structured fields not interpolated strings.",
+        "Keep any intentional user-facing stdout output in CLI mode (e.g. 'Recording...', 'Transcribing...') as-is — those are CLI UI output, not observability."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P4-I023",
+      "category": "rules-violation",
+      "title": "unsafe blocks in app.rs lack // SAFETY: comments — violates rust-safety.mdc",
+      "description": "rust-safety.mdc rule: 'Every unsafe block must have a comment explaining the invariant that makes it sound.' src/app.rs contains multiple bare unsafe blocks without SAFETY justifications: show_alert() (~lines 103–120, NSAlert/NSString FFI), run_app() (~lines 393–399, NSApplication setup), the main event loop (~lines 492–512, nextEventMatchingMask/sendEvent/updateWindows), and the autorelease pool drain (~line 616). The unsafe impl Send/Sync for SharedState (lines 70–71) has a comment but it conflates Send and Sync without explaining why Sync is also valid.",
+      "checks": [
+        "Run `grep -n 'unsafe' src/app.rs` to list all unsafe sites.",
+        "Add a `// SAFETY:` comment above each unsafe block explaining: (a) why the Cocoa object pointers are valid, (b) that msg_send! is only called from the main thread, (c) why autorelease pool drain is sound.",
+        "Expand the SharedState Sync justification: 'SAFETY: SharedState is Sync because all fields are Arc<Mutex<T>>, which are Sync. The unsafe impl is required because AudioHandle contains cpal::Stream which is !Send on macOS; access is always mediated by the Mutex guard.'"
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P4-I024",
+      "category": "rules-violation",
+      "title": "#[allow(clippy::comparison_to_empty)] suppresses a fixable lint — violates rust-style.mdc",
+      "description": "rust-style.mdc rule: 'Run clippy with cargo clippy -- -D warnings; every warning is a bug.' src/app.rs uses `#[allow(clippy::comparison_to_empty)]` at two sites (lines 279 and 370) to suppress a warning on `config.selected_prompt == \"\"`. The correct fix is `config.selected_prompt.is_empty()`, which is more idiomatic and removes the need for the allow attribute. A separate `#[allow(clippy::arc_with_non_send_sync)]` on SharedState::new() is present but may be necessary given the !Send inner type; it should be accompanied by a comment explaining why.",
+      "checks": [
+        "Run `cargo clippy -- -D warnings` and confirm these lints are the only suppressed ones.",
+        "Replace `config.selected_prompt == \"\"` with `config.selected_prompt.is_empty()` in both locations.",
+        "For the arc_with_non_send_sync allow: add a comment explaining it is suppressed because AudioHandle contains cpal::Stream which is !Send by cpal's design, and access is guarded by a Mutex."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P4-I025",
+      "category": "rules-violation",
+      "title": "let _ = menu.append(...) silently discards errors in build_menu() — violates rust-errors.mdc",
+      "description": "rust-errors.mdc rule: 'BAD — silently discards errors: `let _ = do_thing();`'. src/app.rs build_menu() (~lines 276–303) uses `let _ = menu.append(...)` for every menu item. If tray-icon returns an error for any append (e.g. menu item limit exceeded, invalid state), the item is silently omitted from the menu with no logging. Fix: replace with `if let Err(e) = menu.append(...) { tracing::warn!(error = ?e, \"failed to append menu item\"); }`.",
+      "checks": [
+        "Run `grep -n 'let _ = menu.append' src/app.rs` to confirm all affected lines.",
+        "Replace each with the tracing::warn! pattern above."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P4-I026",
+      "category": "spec-compliance",
+      "title": "P3-T033 partial: @2x Retina icon constants not defined in app.rs",
+      "description": "P3-T033 requires all four icon PNGs to be embedded at compile time as constants ICON_IDLE_1X, ICON_IDLE_2X, ICON_ACTIVE_1X, ICON_ACTIVE_2X. src/app.rs:24–25 defines only ICON_IDLE_1X and ICON_ACTIVE_1X. ICON_IDLE_2X and ICON_ACTIVE_2X are never defined or used. The @2x icons therefore never load, meaning Retina displays always render the 1x icon (blurry on high-DPI screens). Fix: add `const ICON_IDLE_2X: &[u8] = include_bytes!(\"../assets/icons/yaptap-idle@2x.png\");` and the active equivalent, then pass both to the TrayIcon builder if tray-icon supports Retina variants.",
+      "checks": [
+        "Confirm assets/icons/yaptap-idle@2x.png and yaptap-active@2x.png exist: `ls assets/icons/`.",
+        "Add the two missing include_bytes! constants in src/app.rs.",
+        "Check tray-icon 0.14 API for a Retina / @2x icon method; use it or document that tray-icon does not yet support Retina overrides."
       ],
       "status": "to do"
     }
