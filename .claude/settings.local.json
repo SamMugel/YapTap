@@ -36,7 +36,16 @@
       "Bash(sed -n '180,186p' /Users/sam.mugel/git/personal/YapTap/src/audio.rs)",
       "Bash(sed -n '90,100p' /Users/sam.mugel/git/personal/YapTap/src/config.rs)",
       "Bash(sed -n '163,172p' /Users/sam.mugel/git/personal/YapTap/src/config.rs)",
-      "Bash(sed -n '33,45p' /Users/sam.mugel/git/personal/YapTap/src/hotkey.rs)"
+      "Bash(sed -n '33,45p' /Users/sam.mugel/git/personal/YapTap/src/hotkey.rs)",
+      "Bash(cargo install:*)",
+      "Bash(timeout 90 yaptap --prompt email-reply)",
+      "Bash(ollama list:*)",
+      "Bash(timeout 90 yaptap --prompt email-reply --llm-model llama3.2)",
+      "Read(//Users/sam.mugel/.config/yaptap/**)",
+      "Bash(cat)",
+      "Bash(cp ~/.config/yaptap/config.toml ~/.config/yaptap/config.toml.bak)",
+      "Bash(cp /tmp/yaptap_test_config.toml ~/.config/yaptap/config.toml)",
+      "Bash(cp ~/.config/yaptap/config.toml.bak ~/.config/yaptap/config.toml)"
     ]
   }
 }
