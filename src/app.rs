@@ -82,6 +82,7 @@ unsafe impl Sync for SharedState {}
 
 #[derive(Clone)]
 enum MenuAction {
+    ToggleRecording,
     SelectPrompt(String),
     NoPrompt,
     OpenConfig,
@@ -263,6 +264,7 @@ fn load_prompts() -> Vec<PromptEntry> {
 fn build_menu(
     prompts: &[PromptEntry],
     config: &AppConfig,
+    state: &AppState,
 ) -> (
     tray_icon::menu::Menu,
     HashMap<tray_icon::menu::MenuId, MenuAction>,
@@ -271,6 +273,19 @@ fn build_menu(
 
     let menu = Menu::new();
     let mut actions: HashMap<tray_icon::menu::MenuId, MenuAction> = HashMap::new();
+
+    // ── Recording toggle (P3-T076) ────────────────────────────────────────────
+    let (record_label, record_enabled) = match state {
+        AppState::Idle => ("Start Recording", true),
+        AppState::Recording => ("Stop Recording", true),
+        AppState::Processing => ("Processing\u{2026}", false),
+    };
+    let record_item = MenuItem::new(record_label, record_enabled, None);
+    if record_enabled {
+        actions.insert(record_item.id().clone(), MenuAction::ToggleRecording);
+    }
+    let _ = menu.append(&record_item);
+    let _ = menu.append(&PredefinedMenuItem::separator());
 
     // ── Prompt list ───────────────────────────────────────────────────────────
     if prompts.is_empty() {
@@ -493,7 +508,7 @@ pub fn run_app() {
     // ── Build tray icon ───────────────────────────────────────────────────────
     let idle_icon = load_icon(ICON_IDLE_1X);
     let prompts = load_prompts();
-    let (menu, mut menu_actions) = build_menu(&prompts, &config);
+    let (menu, mut menu_actions) = build_menu(&prompts, &config, &AppState::Idle);
 
     let tray = tray_icon::TrayIconBuilder::new()
         .with_icon(idle_icon)
@@ -501,6 +516,33 @@ pub fn run_app() {
         .with_tooltip("YapTap")
         .build()
         .expect("failed to create tray icon");
+
+    // P3-T034: Mark our tray icon's NSImage as a macOS template image so the
+    // OS renders it correctly in both light and dark menu-bar appearances.
+    //
+    // SAFETY: We call `[NSStatusBar systemStatusBar]` and read its public
+    // `statusItems` property (declared in NSStatusBar.h since macOS 10.0).
+    // This executes on the main thread immediately after `TrayIconBuilder::build()`
+    // returns, so our NSStatusItem is guaranteed to be the last entry in the
+    // array.  All pointer values are checked against nil before dereferencing.
+    // `setTemplate:YES` is a documented NSImage property with no memory or
+    // threading side-effects beyond the flag itself.
+    unsafe {
+        use cocoa::base::{nil, YES};
+        let status_bar: id = msg_send![objc::class!(NSStatusBar), systemStatusBar];
+        let items: id = msg_send![status_bar, statusItems];
+        let count: usize = msg_send![items, count];
+        if count > 0 {
+            let last_item: id = msg_send![items, objectAtIndex: count - 1];
+            let button: id = msg_send![last_item, button];
+            if button != nil {
+                let image: id = msg_send![button, image];
+                if image != nil {
+                    let _: () = msg_send![image, setTemplate: YES];
+                }
+            }
+        }
+    }
 
     // ── Main event loop ───────────────────────────────────────────────────────
     loop {
@@ -546,9 +588,10 @@ pub fn run_app() {
 
         // ── TrayIconEvent (icon clicked) ──────────────────────────────────────
         while let Ok(_event) = tray_icon::TrayIconEvent::receiver().try_recv() {
-            // Rebuild the menu so check marks reflect the current config.
+            // Rebuild the menu so check marks and recording label reflect current state.
             let prompts = load_prompts();
-            let (new_menu, new_actions) = build_menu(&prompts, &config);
+            let cur_state = shared.state.lock().unwrap().clone();
+            let (new_menu, new_actions) = build_menu(&prompts, &config, &cur_state);
             menu_actions = new_actions;
             tray.set_menu(Some(Box::new(new_menu)));
         }
@@ -557,15 +600,21 @@ pub fn run_app() {
         while let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
             if let Some(action) = menu_actions.get(&event.id).cloned() {
                 match action {
+                    MenuAction::ToggleRecording => {
+                        // Delegate to the existing state machine — identical to hotkey.
+                        let _ = app_event_tx.send(AppEvent::HotkeyPressed);
+                    }
                     MenuAction::SelectPrompt(stem) => {
                         config.selected_prompt = stem.clone();
                         let _ = config.save_prompt(&stem);
-                        rebuild_menu(&tray, &mut menu_actions, &config);
+                        let cur_state = shared.state.lock().unwrap().clone();
+                        rebuild_menu(&tray, &mut menu_actions, &config, &cur_state);
                     }
                     MenuAction::NoPrompt => {
                         config.selected_prompt = String::new();
                         let _ = config.save_prompt("");
-                        rebuild_menu(&tray, &mut menu_actions, &config);
+                        let cur_state = shared.state.lock().unwrap().clone();
+                        rebuild_menu(&tray, &mut menu_actions, &config, &cur_state);
                     }
                     MenuAction::OpenConfig => {
                         let _ = std::process::Command::new("open")
@@ -674,9 +723,10 @@ fn rebuild_menu(
     tray: &tray_icon::TrayIcon,
     menu_actions: &mut HashMap<tray_icon::menu::MenuId, MenuAction>,
     config: &AppConfig,
+    state: &AppState,
 ) {
     let prompts = load_prompts();
-    let (new_menu, new_actions) = build_menu(&prompts, config);
+    let (new_menu, new_actions) = build_menu(&prompts, config, state);
     *menu_actions = new_actions;
     tray.set_menu(Some(Box::new(new_menu)));
 }
