@@ -238,7 +238,7 @@
       "section": "menu-bar",
       "title": "In run_app(): create a `TrayIcon` from the embedded idle icon bytes (P3-T033) via `tray_icon::Icon::from_rgba()`; mark it as a macOS template image so the system renders it correctly in light and dark menu bar themes",
       "implementation_status": "partial",
-      "notes": "TrayIcon is created correctly. However, `tray_icon::Icon` has no API to set NSImage.template = true. Marking as template requires an unsafe Cocoa call after icon creation (get NSStatusItem → NSStatusBarButton → NSImage → setTemplate:YES). Without it, the icon renders as black in light mode but may not adapt correctly in dark mode."
+      "notes": "TrayIcon is created correctly. However, `tray_icon::Icon` has no API to set NSImage.template = true. Marking as template requires an unsafe Cocoa call after icon creation (get NSStatusItem → NSStatusBarButton → NSImage → setTemplate:YES). Without it, the icon renders as black in light mode but may not adapt correctly in dark mode. The unsafe block must carry a `// SAFETY:` comment per rust-safety rules, documenting that the NSStatusBarButton pointer is guaranteed non-null by the NSStatusItem ownership chain established by the tray-icon library."
     },
     {
       "id": "P3-T035",
@@ -354,7 +354,7 @@
       "section": "hotkey",
       "title": "If `rdev::listen()` returns an error: call `show_alert()` with message \"The hotkey '<configured-value>' could not be registered. Edit ~/.config/yaptap/config.toml to choose a different hotkey, then restart YapTap.\"",
       "implementation_status": "partial",
-      "notes": "rdev::listen() errors are only logged to stderr (eprintln!). show_alert() is not called. Blocked: show_alert() requires the main thread (Cocoa NSAlert), but the rdev callback runs on a background thread. Fix: send an AppEvent over the channel and call show_alert() from the main loop."
+      "notes": "rdev::listen() errors are only logged to stderr (eprintln!), which also violates rust-tracing rules (use tracing::error! for observability). show_alert() is not called. Blocked: show_alert() requires the main thread (Cocoa NSAlert), but the rdev callback runs on a background thread. Fix: add a new `AppEvent::HotkeyError(String)` variant to the AppEvent enum — do not reuse PipelineDone, which is semantically incorrect for a registration-time error; send it from the background rdev thread; replace eprintln! with tracing::error!; handle HotkeyError in the main event loop by calling show_alert() with the configured hotkey value."
     },
     {
       "id": "P3-T068",
