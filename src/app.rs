@@ -482,12 +482,33 @@ pub fn run_app() {
         // temporary objects during event processing that must be drained promptly.
         let pool: id = unsafe { msg_send![objc::class!(NSAutoreleasePool), new] };
 
-        // Pump the NSRunLoop for ~16 ms so Cocoa can handle OS-level events
-        // (tray icon clicks, menu delegate callbacks, accessibility events, etc.).
+        // Drain the NSApplication NSEvent queue.
+        //
+        // NSRunLoop::runUntilDate does NOT pump the NSApplication event queue —
+        // NSStatusBar click events are NSEvents delivered to the app, not raw
+        // CFRunLoop sources.  We must call nextEventMatchingMask:untilDate:
+        // inMode:dequeue: + sendEvent: to dispatch them to tray-icon's NSView
+        // (TaoTrayTarget), which is what fires the menu and TrayIconEvent channel.
         unsafe {
-            let run_loop: id = msg_send![objc::class!(NSRunLoop), currentRunLoop];
-            let date: id = msg_send![objc::class!(NSDate), dateWithTimeIntervalSinceNow: 0.016f64];
-            let _: () = msg_send![run_loop, runUntilDate: date];
+            let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+            // Wait up to 16 ms for the next event; returns nil on timeout.
+            let date: id =
+                msg_send![objc::class!(NSDate), dateWithTimeIntervalSinceNow: 0.016_f64];
+            let mode: id = msg_send![
+                objc::class!(NSString),
+                stringWithUTF8String: c"kCFRunLoopDefaultMode".as_ptr()
+            ];
+            let event: id = msg_send![
+                app,
+                nextEventMatchingMask: u64::MAX
+                untilDate: date
+                inMode: mode
+                dequeue: 1u8  // YES
+            ];
+            if event != cocoa::base::nil {
+                let _: () = msg_send![app, sendEvent: event];
+                let _: () = msg_send![app, updateWindows];
+            }
         }
 
         // ── TrayIconEvent (icon clicked) ──────────────────────────────────────
