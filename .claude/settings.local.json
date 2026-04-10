@@ -22,7 +22,21 @@
       "Bash(git -C /Users/sam.mugel/git/personal/YapTap diff --cached)",
       "Bash(git:*)",
       "Bash(pip show:*)",
-      "Bash(./target/debug/yaptap:*)"
+      "Bash(./target/debug/yaptap:*)",
+      "Bash(cargo metadata:*)",
+      "Bash(python3 -c \"import json,sys; pkgs=json.load\\(sys.stdin\\)['packages']; [print\\(p['name'], p['version']\\) for p in pkgs]\")",
+      "Bash(cargo check:*)",
+      "Bash(python3 -c \"import json,sys; pkgs=json.load\\(sys.stdin\\)['packages']; matches=[p for p in pkgs if 'rdev' in p['name']]; [print\\(p['name'], p['version'], p.get\\('manifest_path',''\\)\\) for p in matches]\")",
+      "Bash(rustfmt --check /Users/sam.mugel/git/personal/YapTap/src/transcription.rs)",
+      "Bash(rustfmt --check /Users/sam.mugel/git/personal/YapTap/src/llm.rs)",
+      "Bash(cargo test:*)",
+      "Bash(rustfmt /Users/sam.mugel/git/personal/YapTap/src/transcription.rs)",
+      "Bash(rustfmt /Users/sam.mugel/git/personal/YapTap/src/llm.rs)",
+      "Bash(python3:*)",
+      "Bash(sed -n '180,186p' /Users/sam.mugel/git/personal/YapTap/src/audio.rs)",
+      "Bash(sed -n '90,100p' /Users/sam.mugel/git/personal/YapTap/src/config.rs)",
+      "Bash(sed -n '163,172p' /Users/sam.mugel/git/personal/YapTap/src/config.rs)",
+      "Bash(sed -n '33,45p' /Users/sam.mugel/git/personal/YapTap/src/hotkey.rs)"
     ]
   }
 }

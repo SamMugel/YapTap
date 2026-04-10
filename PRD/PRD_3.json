@@ -120,55 +120,55 @@
       "id": "P3-T013",
       "section": "config",
       "title": "Implement config file path helper in src/config.rs: `fn config_path() -> PathBuf` returning `~/.config/yaptap/config.toml` via `dirs::home_dir()`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T014",
       "section": "config",
       "title": "Move `fn prompts_dir() -> Option<PathBuf>` from main.rs into src/config.rs as a `pub fn`; update main.rs and src/app.rs to call `config::prompts_dir()` so both CLI and app mode share the same binary-relative resolution logic",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T015",
       "section": "config",
       "title": "In AppConfig::load(): create `~/.config/yaptap/` directory via `std::fs::create_dir_all()` if absent; serialize `AppConfig::default()` to TOML using the `toml` crate and write it to config.toml if the file does not exist",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T016",
       "section": "config",
       "title": "In AppConfig::load(): read config.toml and deserialize via `toml::from_str::<AppConfig>()`; return the parsed struct on success (error cases handled by P3-T017)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T017",
       "section": "config",
       "title": "In AppConfig::load(): on TOML deserialisation error call `show_alert()` with message \"Config file is not valid TOML: ~/.config/yaptap/config.toml — using defaults.\" and return AppConfig::default()",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T018",
       "section": "config",
       "title": "In AppConfig::load(): call `parse_hotkey()` on the hotkey field; on parse failure call `show_alert()` with message \"Unknown hotkey '<value>' — using default: option+space.\" and reset the field to \"option+space\" in the returned struct",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T019",
       "section": "config",
       "title": "In AppConfig::load(): if selected_prompt is non-empty and no matching `<stem>.toml` exists in `config/prompts/`, silently reset it to \"\" in the in-memory struct (do not rewrite the file)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T020",
       "section": "config",
       "title": "Implement `AppConfig::save_prompt(stem: &str)`: write the full config to `config.toml.tmp` then rename to `config.toml`; on EXDEV (cross-device rename) fall back to copy-then-delete; on any other failure log a warning to stderr and continue",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T011",
       "section": "cli-additions",
       "title": "Add `--device <index: usize>` optional CLI flag to the existing Args struct; pass the value as `Some(index)` to `start_recording()` in CLI mode; this flag alone (with no other flags) still triggers CLI mode per P3-T002",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T006",
@@ -180,121 +180,121 @@
       "id": "P3-T021",
       "section": "single-instance",
       "title": "Implement single-instance guard in `run_app()`: if `~/.config/yaptap/yaptap.lock` exists, read the stored PID and call `kill(pid, 0)`; if alive exit 0; if dead (ESRCH) or absent, write own PID as a decimal string to the lock file",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T023",
       "section": "app-lifecycle",
       "title": "In run_app(): call `AppConfig::load()` and store the result; call the single-instance guard (P3-T021) which may exit early",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T024",
       "section": "app-lifecycle",
       "title": "In run_app(): set the NSApplication activation policy to `NSApplicationActivationPolicyProhibited` via the cocoa crate (`NSApp().setActivationPolicy_()`) so no Dock icon or app menu bar appears",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T028",
       "section": "icon-assets",
       "title": "Create assets/icons/ directory",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T029",
       "section": "icon-assets",
       "title": "Create assets/icons/yaptap-idle.png (18×18px @1×): three filled black rectangles 3px wide with 2px gaps, heights left=6px centre=10px right=6px, centred in the bounding box, transparent background (macOS template image format)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T030",
       "section": "icon-assets",
       "title": "Create assets/icons/yaptap-idle@2x.png (36×36px @2×): same idle design at double resolution for Retina displays",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T031",
       "section": "icon-assets",
       "title": "Create assets/icons/yaptap-active.png (18×18px @1×): three filled black rectangles 3px wide with 2px gaps, all bars 10px tall, centred, transparent background",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T032",
       "section": "icon-assets",
       "title": "Create assets/icons/yaptap-active@2x.png (36×36px @2×): same active design at double resolution for Retina displays",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T033",
       "section": "icon-assets",
       "title": "In src/app.rs: embed all four icon PNGs at compile time via `include_bytes!()` and expose as constants `ICON_IDLE_1X`, `ICON_IDLE_2X`, `ICON_ACTIVE_1X`, `ICON_ACTIVE_2X`; use these byte slices everywhere icons are loaded (eliminates runtime filesystem dependency)",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T034",
       "section": "menu-bar",
       "title": "In run_app(): create a `TrayIcon` from the embedded idle icon bytes (P3-T033) via `tray_icon::Icon::from_rgba()`; mark it as a macOS template image so the system renders it correctly in light and dark menu bar themes",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T035",
       "section": "menu-bar",
       "title": "Implement `fn switch_icon(tray: &TrayIcon, state: &AppState)` in src/app.rs: load idle bytes when Idle, active bytes when Recording or Processing, and call `tray.set_icon()`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T036",
       "section": "prompt-menu",
       "title": "Implement `fn load_prompts(dir: &Path) -> Vec<PromptEntry>` (where `PromptEntry` holds stem, name, description): read all `.toml` files from the directory sorted alphabetically by stem; skip files that cannot be parsed without error",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T037",
       "section": "prompt-menu",
       "title": "Implement `fn build_menu(prompts: &[PromptEntry], config: &AppConfig) -> (Menu, MenuIds)` where `MenuIds` maps each `MenuId` to a semantic role (`PromptStem(String)`, `NoPrompt`, `OpenConfig`, `Quit`); construct the tray-icon `Menu` from prompt entries",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T038",
       "section": "prompt-menu",
       "title": "In build_menu(): if `prompts` is empty, add a single disabled \"No prompts found\" item in place of the prompt list",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T039",
       "section": "prompt-menu",
       "title": "In build_menu(): add a checkmark to the `MenuItem` whose stem matches `config.selected_prompt`; add the checkmark to \"No Prompt\" when `selected_prompt` is \"\"",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T040",
       "section": "prompt-menu",
       "title": "In build_menu(): add a separator after the prompt list, then a \"No Prompt\" item, then a second separator",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T041",
       "section": "prompt-menu",
       "title": "In build_menu(): add a disabled hotkey display item formatting the configured hotkey string with Unicode modifier symbols (option→⌥, cmd→⌘, ctrl→⌃, shift→⇧, space→Space), e.g. \"Hotkey: ⌥Space\"",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T042",
       "section": "prompt-menu",
       "title": "In build_menu(): add an \"Open Config…\" item, a separator, and a \"Quit YapTap\" item; register their `MenuId`s in the returned `MenuIds`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T048",
       "section": "prompt-menu",
       "title": "On each `TrayIconEvent::Click` (icon clicked): call `load_prompts()` and `build_menu()` to rebuild the menu from disk and set it on the TrayIcon before the OS displays it, so newly added or removed prompt files are reflected without restarting",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T067",
       "section": "error-handling",
       "title": "Implement `fn cleanup_and_exit(shared: &SharedState)` in src/app.rs: lock `shared.child` and call `.kill()` if Some; lock `shared.audio`, take the handle, and call `stop_and_save()` discarding the result; delete `~/.config/yaptap/yaptap.lock`; call `std::process::exit(0)`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T043",
