@@ -1,6 +1,8 @@
 /// YapTap — Phase 2 CLI voice transcription + LLM pipeline entry point.
 #[allow(dead_code)]
 mod audio;
+#[allow(dead_code)]
+mod hotkey;
 ///
 /// Records microphone audio, writes a temporary WAV file, delegates
 /// transcription to `python3 src/core/transcribe.py <wav_path>`, and
