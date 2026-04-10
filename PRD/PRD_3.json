@@ -237,8 +237,8 @@
       "id": "P3-T034",
       "section": "menu-bar",
       "title": "In run_app(): create a `TrayIcon` from the embedded idle icon bytes (P3-T033) via `tray_icon::Icon::from_rgba()`; mark it as a macOS template image so the system renders it correctly in light and dark menu bar themes",
-      "implementation_status": "in_progress",
-      "notes": "TrayIcon is created correctly. However, `tray_icon::Icon` has no API to set NSImage.template = true. Marking as template requires an unsafe Cocoa call after icon creation (get NSStatusItem → NSStatusBarButton → NSImage → setTemplate:YES). Without it, the icon renders as black in light mode but may not adapt correctly in dark mode. The unsafe block must carry a `// SAFETY:` comment per rust-safety rules, documenting that the NSStatusBarButton pointer is guaranteed non-null by the NSStatusItem ownership chain established by the tray-icon library."
+      "implementation_status": "done",
+      "notes": "Implemented: after TrayIconBuilder::build(), queries [NSStatusBar systemStatusBar].statusItems, takes the last item (ours, just created), and calls [NSImage setTemplate:YES] on the button image. Full SAFETY comment explains invariants: main-thread execution, last item is ours, nil-checked pointers, documented NSImage property."
     },
     {
       "id": "P3-T035",
@@ -501,7 +501,8 @@
       "id": "P3-T076",
       "section": "menu-bar",
       "title": "Add a 'Start Recording' / 'Stop Recording' toggle menu item to the tray dropdown as a clickable alternative to the global hotkey: when AppState is Idle show 'Start Recording'; when AppState is Recording show 'Stop Recording'; on click send AppEvent::HotkeyPressed over the existing sender so the state machine handles it identically to the hotkey; rebuild the menu with the correct label each time build_menu() is called (pass current AppState as a parameter)",
-      "implementation_status": "in_progress"
+      "implementation_status": "done",
+      "notes": "Implemented: ToggleRecording added to MenuAction; build_menu() accepts &AppState and renders 'Start Recording' (Idle), 'Stop Recording' (Recording), or disabled 'Processing…'; rebuild_menu() takes &AppState; ToggleRecording sends AppEvent::HotkeyPressed reusing existing state machine; TrayIconEvent reads shared.state before rebuilding menu."
     }
   ]
 }
