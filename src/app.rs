@@ -109,6 +109,11 @@ impl Drop for WavCleanup {
 /// Show a modal NSAlert dialog.  Returns the zero-based index of the button
 /// the user clicked (0 = first/default button).
 pub fn show_alert(_title: &str, message: &str, buttons: &[&str]) -> usize {
+    // SAFETY: All Cocoa object pointers are obtained from documented AppKit
+    // factory methods (NSAlert +new, NSString +alloc / -initWithUTF8String:)
+    // that are guaranteed non-null for these calls.  This function is only
+    // ever called from the main thread, satisfying AppKit's threading
+    // requirement for UI operations.
     unsafe {
         let alert: id = msg_send![objc::class!(NSAlert), new];
 
@@ -284,49 +289,70 @@ fn build_menu(
     if record_enabled {
         actions.insert(record_item.id().clone(), MenuAction::ToggleRecording);
     }
-    let _ = menu.append(&record_item);
-    let _ = menu.append(&PredefinedMenuItem::separator());
+    if let Err(e) = menu.append(&record_item) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
+    if let Err(e) = menu.append(&PredefinedMenuItem::separator()) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     // ── Prompt list ───────────────────────────────────────────────────────────
     if prompts.is_empty() {
         let no_prompts = MenuItem::new("No prompts found", false, None);
-        let _ = menu.append(&no_prompts);
+        if let Err(e) = menu.append(&no_prompts) {
+            tracing::warn!(error = ?e, "failed to append menu item");
+        }
     } else {
         for entry in prompts {
             let checked = entry.stem == config.selected_prompt;
             let item = CheckMenuItem::new(&entry.name, true, checked, None);
             actions.insert(item.id().clone(), MenuAction::SelectPrompt(entry.stem.clone()));
-            let _ = menu.append(&item);
+            if let Err(e) = menu.append(&item) {
+                tracing::warn!(error = ?e, "failed to append menu item");
+            }
         }
     }
 
-    let _ = menu.append(&PredefinedMenuItem::separator());
+    if let Err(e) = menu.append(&PredefinedMenuItem::separator()) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     // ── "No Prompt" option ────────────────────────────────────────────────────
-    #[allow(clippy::comparison_to_empty)]
-    let no_prompt_checked = config.selected_prompt == "";
+    let no_prompt_checked = config.selected_prompt.is_empty();
     let no_prompt = CheckMenuItem::new("No Prompt", true, no_prompt_checked, None);
     actions.insert(no_prompt.id().clone(), MenuAction::NoPrompt);
-    let _ = menu.append(&no_prompt);
+    if let Err(e) = menu.append(&no_prompt) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
-    let _ = menu.append(&PredefinedMenuItem::separator());
+    if let Err(e) = menu.append(&PredefinedMenuItem::separator()) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     // ── Informational hotkey display (disabled) ───────────────────────────────
     let hotkey_text = format!("Hotkey: {}", hotkey_display(&config.hotkey));
     let hotkey_item = MenuItem::new(&hotkey_text, false, None);
-    let _ = menu.append(&hotkey_item);
+    if let Err(e) = menu.append(&hotkey_item) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     // ── Open Config… ──────────────────────────────────────────────────────────
     let open_config = MenuItem::new("Open Config\u{2026}", true, None);
     actions.insert(open_config.id().clone(), MenuAction::OpenConfig);
-    let _ = menu.append(&open_config);
+    if let Err(e) = menu.append(&open_config) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
-    let _ = menu.append(&PredefinedMenuItem::separator());
+    if let Err(e) = menu.append(&PredefinedMenuItem::separator()) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     // ── Quit ──────────────────────────────────────────────────────────────────
     let quit = MenuItem::new("Quit YapTap", true, None);
     actions.insert(quit.id().clone(), MenuAction::Quit);
-    let _ = menu.append(&quit);
+    if let Err(e) = menu.append(&quit) {
+        tracing::warn!(error = ?e, "failed to append menu item");
+    }
 
     (menu, actions)
 }
@@ -394,8 +420,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
     )?;
 
     // ── LLM (if a prompt is selected) ────────────────────────────────────────
-    #[allow(clippy::comparison_to_empty)]
-    let output = if config.selected_prompt != "" {
+    let output = if !config.selected_prompt.is_empty() {
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
             crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &shared.child)?
@@ -417,6 +442,11 @@ pub fn run_app() {
     // but the app CAN receive menu-bar clicks and other UI events.
     // NSApplicationActivationPolicyProhibited (2) is wrong here — it prevents
     // any user-interface event processing (menus never open).
+    //
+    // SAFETY: sharedApplication and setActivationPolicy: are documented
+    // NSApplication methods safe to call on the main thread before any windows
+    // exist.  finishLaunching completes Cocoa's internal setup and is required
+    // before any UI (including NSAlert) can be shown.
     unsafe {
         let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
         let _: () = msg_send![app, setActivationPolicy: 1i64];
@@ -426,7 +456,13 @@ pub fn run_app() {
     }
 
     // ── Load config ───────────────────────────────────────────────────────────
-    let mut config = AppConfig::load();
+    let (mut config, config_warnings) = AppConfig::load();
+
+    // Show any deferred config warnings (TOML parse errors, invalid hotkey)
+    // as UI alerts now that finishLaunching has been called.
+    for warning in config_warnings {
+        show_alert("Configuration Warning", &warning, &["OK"]);
+    }
 
     // ── Single-instance guard (may exit 0 if another copy is running) ─────────
     ensure_single_instance();
@@ -469,22 +505,44 @@ pub fn run_app() {
                 let tx = Arc::clone(&app_event_tx);
                 let hotkey_str = config.hotkey.clone();
                 thread::spawn(move || {
+                    tracing::debug!("rdev thread spawned");
                     // tx_inner is moved into the rdev callback; tx is kept for
                     // the error path after rdev::listen() returns.
                     let tx_inner = Arc::clone(&tx);
                     let mut pressed: HashSet<rdev::Key> = HashSet::new();
+                    // P5-I008: tracks whether the main key is currently held,
+                    // suppressing key-repeat events from firing multiple hotkeys.
+                    let mut main_key_down = false;
                     let result = rdev::listen(move |event| {
                         match event.event_type {
                             rdev::EventType::KeyPress(key) => {
                                 pressed.insert(key);
-                                let modifiers_held =
-                                    parsed.modifiers.iter().all(|m| pressed.contains(m));
-                                if modifiers_held && pressed.contains(&parsed.key) {
+                                // P5-I007: treat AltGr (right ⌥Option, hardware
+                                // keycode 61) as equivalent to Alt (left ⌥Option,
+                                // keycode 58) when testing modifier satisfaction.
+                                let mut effective_pressed = pressed.clone();
+                                if effective_pressed.contains(&rdev::Key::AltGr) {
+                                    effective_pressed.insert(rdev::Key::Alt);
+                                }
+                                let modifiers_held = parsed
+                                    .modifiers
+                                    .iter()
+                                    .all(|m| effective_pressed.contains(m));
+                                // P5-I009: fire only when the main key is the
+                                // key just pressed (not when a modifier is pressed
+                                // onto an already-held main key).
+                                // P5-I008: suppress auto-repeat by gating on
+                                // !main_key_down.
+                                if modifiers_held && key == parsed.key && !main_key_down {
+                                    main_key_down = true;
                                     let _ = tx_inner.send(AppEvent::HotkeyPressed);
                                 }
                             }
                             rdev::EventType::KeyRelease(key) => {
                                 pressed.remove(&key);
+                                if key == parsed.key {
+                                    main_key_down = false;
+                                }
                             }
                             _ => {}
                         }
@@ -517,32 +575,13 @@ pub fn run_app() {
         .build()
         .expect("failed to create tray icon");
 
-    // P3-T034: Mark our tray icon's NSImage as a macOS template image so the
-    // OS renders it correctly in both light and dark menu-bar appearances.
-    //
-    // SAFETY: We call `[NSStatusBar systemStatusBar]` and read its public
-    // `statusItems` property (declared in NSStatusBar.h since macOS 10.0).
-    // This executes on the main thread immediately after `TrayIconBuilder::build()`
-    // returns, so our NSStatusItem is guaranteed to be the last entry in the
-    // array.  All pointer values are checked against nil before dereferencing.
-    // `setTemplate:YES` is a documented NSImage property with no memory or
-    // threading side-effects beyond the flag itself.
-    unsafe {
-        use cocoa::base::{nil, YES};
-        let status_bar: id = msg_send![objc::class!(NSStatusBar), systemStatusBar];
-        let items: id = msg_send![status_bar, statusItems];
-        let count: usize = msg_send![items, count];
-        if count > 0 {
-            let last_item: id = msg_send![items, objectAtIndex: count - 1];
-            let button: id = msg_send![last_item, button];
-            if button != nil {
-                let image: id = msg_send![button, image];
-                if image != nil {
-                    let _: () = msg_send![image, setTemplate: YES];
-                }
-            }
-        }
-    }
+    // FIXME(P5-I002): template image flag not set — tray-icon 0.14 exposes no
+    // public API for marking the NSStatusItem's NSImage as a template image.
+    // Icons are black-on-transparent and will be invisible on a dark menu bar
+    // until tray-icon adds template image support or a safe alternative is found.
+    // The previous implementation (P3-T034) used the private NSSystemStatusBar
+    // -statusItems selector which caused NSInvalidArgumentException on launch
+    // and has been removed (P5-I001).
 
     // ── Main event loop ───────────────────────────────────────────────────────
     loop {
@@ -555,6 +594,11 @@ pub fn run_app() {
 
         // Each iteration gets its own autorelease pool — Cocoa allocates many
         // temporary objects during event processing that must be drained promptly.
+        //
+        // SAFETY: NSAutoreleasePool +new is a documented factory method that
+        // returns a valid pool for the current thread.  The pool is drained at
+        // the bottom of this loop iteration on the same thread it was created on,
+        // which is required by Cocoa's autorelease pool semantics.
         let pool: id = unsafe { msg_send![objc::class!(NSAutoreleasePool), new] };
 
         // Drain the NSApplication NSEvent queue.
@@ -564,6 +608,13 @@ pub fn run_app() {
         // CFRunLoop sources.  We must call nextEventMatchingMask:untilDate:
         // inMode:dequeue: + sendEvent: to dispatch them to tray-icon's NSView
         // (TaoTrayTarget), which is what fires the menu and TrayIconEvent channel.
+        //
+        // SAFETY: sharedApplication returns the singleton NSApplication created
+        // above; it is never null after +sharedApplication.  All msg_send! calls
+        // here execute on the main thread as required by AppKit.  The event
+        // pointer returned by nextEventMatchingMask:... is either nil (timeout)
+        // or a valid autoreleased NSEvent owned by the run loop; we test for nil
+        // before calling sendEvent:.
         unsafe {
             let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
             // Wait up to 16 ms for the next event; returns nil on timeout.
@@ -713,6 +764,11 @@ pub fn run_app() {
         }
 
         // Drain the per-iteration autorelease pool.
+        //
+        // SAFETY: pool was created by NSAutoreleasePool +new at the top of this
+        // loop iteration on the same (main) thread.  Draining it here is sound
+        // because all autoreleased objects from this iteration are in scope and
+        // no references to them are held past this point.
         unsafe { let _: () = msg_send![pool, drain]; }
     }
 }

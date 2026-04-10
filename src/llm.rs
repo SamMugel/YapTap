@@ -1,4 +1,4 @@
-/// LLM helper — spawns `python3 src/core/llm.py` as a subprocess, writes the
+/// LLM helper — spawns `python3 <script>` as a subprocess, writes the
 /// transcript to its stdin, collects the entire stdout response into a
 /// [`String`], and returns it.
 ///
@@ -6,11 +6,23 @@
 /// this function buffers all output so the menu-bar app can decide how to
 /// display or paste it.
 use std::io::{Read as _, Write as _};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+
+/// Resolve the path to `src/core/llm.py` relative to the running binary.
+///
+/// In app mode the cwd is often not the project root, so we anchor to the
+/// binary's parent directory and walk up to find the script.  Falls back to
+/// the cwd-relative path for development builds.
+fn llm_script_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("../../src/core/llm.py")))
+        .unwrap_or_else(|| PathBuf::from("src/core/llm.py"))
+}
 
 /// Run the LLM pipeline, collecting all output.
 ///
@@ -29,8 +41,9 @@ pub fn run_llm_collect(
     active_child: &Arc<Mutex<Option<Child>>>,
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
+    let script = llm_script_path();
     let mut cmd = Command::new("python3");
-    cmd.arg("src/core/llm.py")
+    cmd.arg(&script)
         .arg("--prompt-file")
         .arg(prompt_path)
         .args(["--model", model])

@@ -1,13 +1,25 @@
-/// Transcription helper — spawns `python3 src/core/transcribe.py` as a
-/// subprocess, stores the [`Child`] handle in `active_child` so that the
-/// caller can kill it on demand (e.g. from a global hot-key), then waits for
-/// completion and returns the transcript text.
+/// Transcription helper — spawns `python3 <script>` as a subprocess, stores
+/// the [`Child`] handle in `active_child` so that the caller can kill it on
+/// demand (e.g. from a global hot-key), then waits for completion and returns
+/// the transcript text.
 use std::io::Read as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+
+/// Resolve the path to `src/core/transcribe.py` relative to the running binary.
+///
+/// In app mode the cwd is often not the project root, so we anchor to the
+/// binary's parent directory and walk up to find the script.  Falls back to
+/// the cwd-relative path for development builds.
+fn transcribe_script_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("../../src/core/transcribe.py")))
+        .unwrap_or_else(|| PathBuf::from("src/core/transcribe.py"))
+}
 
 /// Run Whisper transcription on `wav_path` using the given `model`.
 ///
@@ -24,8 +36,9 @@ pub fn run_transcription(
     active_child: &Arc<Mutex<Option<Child>>>,
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
+    let script = transcribe_script_path();
     let mut cmd = Command::new("python3");
-    cmd.arg("src/core/transcribe.py")
+    cmd.arg(&script)
         .arg(wav_path)
         .args(["--model", model])
         .stdout(Stdio::piped())

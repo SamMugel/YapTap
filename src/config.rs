@@ -62,18 +62,21 @@ pub fn prompts_dir() -> Option<PathBuf> {
 impl AppConfig {
     /// Load config from disk, creating the file (with defaults) if absent.
     ///
-    /// On any parse / validation error a warning is printed to stderr and the
-    /// default value is used — the caller should show a UI alert if desired.
-    pub fn load() -> AppConfig {
+    /// Returns `(AppConfig, Vec<String>)` where the `Vec` carries deferred
+    /// human-readable warning messages for TOML parse errors and invalid
+    /// hotkey values.  The caller should show these as UI alerts after
+    /// `finishLaunching` has been called.
+    pub fn load() -> (AppConfig, Vec<String>) {
+        let mut warnings: Vec<String> = Vec::new();
         let path = config_path();
 
         // Ensure the parent directory exists.
         if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                eprintln!(
-                    "warning: could not create config directory {}: {}",
-                    parent.display(),
-                    e
+                tracing::warn!(
+                    path = %parent.display(),
+                    error = %e,
+                    "could not create config directory"
                 );
             }
         }
@@ -84,51 +87,59 @@ impl AppConfig {
             match toml::to_string_pretty(&default_cfg) {
                 Ok(contents) => {
                     if let Err(e) = std::fs::write(&path, &contents) {
-                        eprintln!(
-                            "warning: could not write default config to {}: {}",
-                            path.display(),
-                            e
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %e,
+                            "could not write default config"
                         );
                     }
                 }
                 Err(e) => {
-                    eprintln!("warning: could not serialise default config: {e}");
+                    tracing::warn!(error = %e, "could not serialise default config");
                 }
             }
-            return default_cfg;
+            return (default_cfg, warnings);
         }
 
         // Read and parse.
         let contents = match std::fs::read_to_string(&path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!(
-                    "warning: could not read config file {}: {} — using defaults",
-                    path.display(),
-                    e
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "could not read config file — using defaults"
                 );
-                return AppConfig::default();
+                return (AppConfig::default(), warnings);
             }
         };
 
         let mut cfg: AppConfig = match toml::from_str(&contents) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!(
-                    "warning: config file {} is invalid TOML ({}) — using defaults",
-                    path.display(),
-                    e
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "config file is invalid TOML — using defaults"
                 );
-                return AppConfig::default();
+                warnings.push(format!(
+                    "Config file is not valid TOML: {} — using defaults.",
+                    path.display()
+                ));
+                return (AppConfig::default(), warnings);
             }
         };
 
         // Validate hotkey by attempting to parse it.
         if crate::hotkey::parse_hotkey(&cfg.hotkey).is_err() {
-            eprintln!(
-                "warning: invalid hotkey {:?} in config — resetting to \"option+space\"",
-                cfg.hotkey
+            let bad_hotkey = cfg.hotkey.clone();
+            tracing::warn!(
+                hotkey = %bad_hotkey,
+                "invalid hotkey in config — resetting to option+space"
             );
+            warnings.push(format!(
+                "Unknown hotkey \"{bad_hotkey}\" — using default: option+space."
+            ));
             cfg.hotkey = "option+space".to_string();
         }
 
@@ -138,22 +149,22 @@ impl AppConfig {
                 .map(|d| d.join(format!("{}.toml", cfg.selected_prompt)).exists())
                 .unwrap_or(false);
             if !prompt_exists {
-                eprintln!(
-                    "warning: selected prompt {:?} not found — resetting to none",
-                    cfg.selected_prompt
+                tracing::warn!(
+                    prompt = %cfg.selected_prompt,
+                    "selected prompt not found — resetting to none"
                 );
                 cfg.selected_prompt = String::new();
             }
         }
 
-        cfg
+        (cfg, warnings)
     }
 
     /// Atomically persist the config with `selected_prompt` set to `stem`.
     ///
     /// Writes to a `.tmp` sibling then renames into place.  Falls back to
     /// copy+delete when the rename crosses a filesystem boundary (EXDEV).
-    /// Any I/O error is logged to stderr and swallowed so callers need not
+    /// Any I/O error is logged via tracing and swallowed so callers need not
     /// handle it.
     pub fn save_prompt(&self, stem: &str) -> anyhow::Result<()> {
         let mut updated = self.clone();
@@ -165,16 +176,16 @@ impl AppConfig {
         let contents = match toml::to_string_pretty(&updated) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("warning: could not serialise config: {e}");
+                tracing::warn!(error = %e, "could not serialise config");
                 return Ok(());
             }
         };
 
         if let Err(e) = std::fs::write(&tmp_path, &contents) {
-            eprintln!(
-                "warning: could not write config to {}: {}",
-                tmp_path.display(),
-                e
+            tracing::warn!(
+                path = %tmp_path.display(),
+                error = %e,
+                "could not write config"
             );
             return Ok(());
         }
@@ -184,31 +195,30 @@ impl AppConfig {
             if rename_err.raw_os_error() == Some(libc_exdev()) {
                 // Cross-device rename — copy then delete.
                 if let Err(e) = std::fs::copy(&tmp_path, &path) {
-                    eprintln!(
-                        "warning: could not copy config {} -> {}: {}",
-                        tmp_path.display(),
-                        path.display(),
-                        e
+                    tracing::warn!(
+                        src = %tmp_path.display(),
+                        dst = %path.display(),
+                        error = %e,
+                        "could not copy config"
                     );
                     let _ = std::fs::remove_file(&tmp_path);
                     return Ok(());
                 }
                 let _ = std::fs::remove_file(&tmp_path);
             } else if rename_err.kind() == ErrorKind::NotFound {
-                // Destination directory may have disappeared; already warned above.
-                eprintln!(
-                    "warning: could not rename config {} -> {}: {}",
-                    tmp_path.display(),
-                    path.display(),
-                    rename_err
+                tracing::warn!(
+                    src = %tmp_path.display(),
+                    dst = %path.display(),
+                    error = %rename_err,
+                    "could not rename config"
                 );
                 let _ = std::fs::remove_file(&tmp_path);
             } else {
-                eprintln!(
-                    "warning: could not rename config {} -> {}: {}",
-                    tmp_path.display(),
-                    path.display(),
-                    rename_err
+                tracing::warn!(
+                    src = %tmp_path.display(),
+                    dst = %path.display(),
+                    error = %rename_err,
+                    "could not rename config"
                 );
                 let _ = std::fs::remove_file(&tmp_path);
             }
