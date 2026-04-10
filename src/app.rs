@@ -385,13 +385,17 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn run_app() {
-    // ── Configure NSApplication as a background/menu-bar-only process ─────────
-    // LSUIElement = 1 (set in Info.plist) keeps us out of the Dock.
-    // Here we reinforce that at runtime via setActivationPolicy:.
-    // NSApplicationActivationPolicyProhibited = 2
+    // ── Configure NSApplication as a menu-bar-only (accessory) process ──────────
+    // NSApplicationActivationPolicyAccessory (1): no Dock icon, no app menu bar,
+    // but the app CAN receive menu-bar clicks and other UI events.
+    // NSApplicationActivationPolicyProhibited (2) is wrong here — it prevents
+    // any user-interface event processing (menus never open).
     unsafe {
         let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
-        let _: () = msg_send![app, setActivationPolicy: 2i64];
+        let _: () = msg_send![app, setActivationPolicy: 1i64];
+        // finishLaunching completes Cocoa's setup; without it menu delegates
+        // are never installed and click events are silently dropped.
+        let _: () = msg_send![app, finishLaunching];
     }
 
     // ── Load config ───────────────────────────────────────────────────────────
@@ -474,8 +478,12 @@ pub fn run_app() {
 
     // ── Main event loop ───────────────────────────────────────────────────────
     loop {
+        // Each iteration gets its own autorelease pool — Cocoa allocates many
+        // temporary objects during event processing that must be drained promptly.
+        let pool: id = unsafe { msg_send![objc::class!(NSAutoreleasePool), new] };
+
         // Pump the NSRunLoop for ~16 ms so Cocoa can handle OS-level events
-        // (tray icon clicks, accessibility events, etc.).
+        // (tray icon clicks, menu delegate callbacks, accessibility events, etc.).
         unsafe {
             let run_loop: id = msg_send![objc::class!(NSRunLoop), currentRunLoop];
             let date: id = msg_send![objc::class!(NSDate), dateWithTimeIntervalSinceNow: 0.016f64];
@@ -582,6 +590,9 @@ pub fn run_app() {
                 }
             }
         }
+
+        // Drain the per-iteration autorelease pool.
+        unsafe { let _: () = msg_send![pool, drain]; }
     }
 }
 
