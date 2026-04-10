@@ -36,85 +36,85 @@
       "id": "P3-T001",
       "section": "foundation",
       "title": "Add tray-icon, rdev, arboard, dirs, and cocoa to [dependencies] in Cargo.toml",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T003",
       "section": "foundation",
       "title": "Create src/audio.rs and add `mod audio;` to main.rs: define `AudioHandle` struct holding the live `cpal::Stream`, a shared `Arc<Mutex<Vec<i16>>>` PCM buffer, and the negotiated sample format",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T009",
       "section": "foundation",
       "title": "Create src/hotkey.rs and add `mod hotkey;` to main.rs: implement `fn parse_hotkey(s: &str) -> anyhow::Result<ParsedHotkey>` where `ParsedHotkey` holds a `Vec<rdev::Key>` of required modifiers and a single main `rdev::Key`; return an error if any token is unrecognised",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T010",
       "section": "foundation",
       "title": "In src/hotkey.rs: declare `extern \"C\" { fn AXIsProcessTrusted() -> bool; }` with `#[link(name = \"ApplicationServices\", kind = \"framework\")]` so Accessibility permission can be checked without an additional crate",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T012",
       "section": "config",
       "title": "Create src/config.rs and add `mod config;` to main.rs: define `AppConfig` struct with fields hotkey (String), selected_prompt (String), whisper_model (String), llm_model (String); implement Default returning (\"option+space\", \"\", \"base\", \"llama3\")",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T022",
       "section": "app-lifecycle",
       "title": "Create src/app.rs and add `mod app;` to main.rs: define `pub fn run_app()` as the app-mode entry point",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T026",
       "section": "app-lifecycle",
       "title": "Define `enum AppEvent { HotkeyPressed, PipelineDone(Result<String, String>) }` in src/app.rs; create an `mpsc::channel::<AppEvent>()` in `run_app()` and hold the `Sender` as an `Arc<Sender<AppEvent>>` for cloning into threads",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T053",
       "section": "state-machine",
       "title": "Define `enum AppState { Idle, Recording, Processing }` in src/app.rs; define `struct SharedState { state: Arc<Mutex<AppState>>, audio: Arc<Mutex<Option<AudioHandle>>>, child: Arc<Mutex<Option<Child>>> }`; create a `SharedState` instance in `run_app()`",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T002",
       "section": "foundation",
       "title": "At the top of main(): if no CLI flags are present (no prompt, prompt-file, list-prompts, model, llm-model, device), call run_app() and return; otherwise fall through to the existing CLI pipeline",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T004",
       "section": "foundation",
       "title": "Implement `fn start_recording(device_index: Option<usize>) -> anyhow::Result<AudioHandle>` in src/audio.rs: open a cpal input stream targeting 16 kHz mono i16, register the PCM callback to push samples into the shared buffer, and return the AudioHandle immediately without blocking",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T005",
       "section": "foundation",
       "title": "Implement `AudioHandle::stop_and_save(self) -> anyhow::Result<PathBuf>` in src/audio.rs: drop the cpal Stream to stop capture, encode the PCM buffer to a named temp WAV file using hound, return the path",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T007",
       "section": "foundation",
       "title": "Create src/transcription.rs and add `mod transcription;` to main.rs: implement `fn run_transcription(wav_path: &Path, model: &str, active_child: &Arc<Mutex<Option<Child>>>) -> anyhow::Result<String>` — store the spawned `Child` in `active_child` before waiting, clear it on completion; update CLI path in main() to call this function",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T008",
       "section": "foundation",
       "title": "Create src/llm.rs and add `mod llm;` to main.rs: implement `fn run_llm_collect(transcript: &str, prompt_path: &Path, model: &str, active_child: &Arc<Mutex<Option<Child>>>) -> anyhow::Result<String>` — store the spawned `Child` in `active_child` before buffering stdout to a String; keep the existing token-streaming inline in main() for CLI mode",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T025",
       "section": "app-lifecycle",
       "title": "Implement `fn show_alert(title: &str, message: &str, buttons: &[&str]) -> usize` in src/app.rs using `cocoa::appkit::NSAlert`: create an NSAlert, set the message text, add one button per entry in `buttons`, run modally, and return the index of the clicked button",
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P3-T013",

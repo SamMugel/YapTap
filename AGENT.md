@@ -11,9 +11,20 @@
 - `config/prompts/` — Bundled default prompt TOML files (phase 2)
 - `PRD/PRD_1.json` — Phase 1 task tracking
 - `PRD/PRD_2.json` — Phase 2 task tracking
+- `src/app.rs` — Phase 3 menu bar app mode (NSApplication, TrayIcon, hotkey, pipeline)
+- `src/audio.rs` — Non-blocking audio capture (AudioHandle, start_recording, stop_and_save)
+- `src/config.rs` — Config file management (~/.config/yaptap/config.toml)
+- `src/hotkey.rs` — Global hotkey parsing and AXIsProcessTrusted check
+- `src/transcription.rs` — run_transcription() wrapper for transcribe.py subprocess
+- `src/llm.rs` — run_llm_collect() wrapper for llm.py subprocess (buffers output)
+- `assets/icons/` — Menu bar icon PNGs (idle/active @1x and @2x)
+- `PRD/PRD_3.json` — Phase 3 task tracking
 
 ## Build Commands
 ```bash
+# Build with all Phase 3 deps (takes longer first time due to cocoa/tray-icon)
+cargo build
+
 # Rust build
 cargo build
 
@@ -33,6 +44,12 @@ python -m unittest src.core.llm_test       # phase 2
 
 ## Run
 ```bash
+# Phase 3: launch menu bar app (no args)
+yaptap
+
+# Phase 3: with explicit audio device
+yaptap --device 0
+
 # After cargo install --path .
 yaptap                              # phase 1: record → transcript
 yaptap --list-prompts               # show available prompts from config/prompts/
@@ -47,6 +64,7 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - `ollama` Python package installed (phase 2)
 - `ollama` server running with at least one model pulled (phase 2)
 - macOS (cpal uses CoreAudio)
+- `macOS Accessibility permission` — required for global hotkey (grant in System Settings → Privacy & Security → Accessibility)
 
 ## Key Notes
 - Python tests mock `whisper.load_model` and `ollama.chat` — no real model needed for tests
@@ -55,4 +73,8 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - SIGINT exits with code 130 and cleans up temp files
 - Prompts live in `config/prompts/`; add `.toml` files there to extend the prompt library
 - `llm.py` reads transcript from stdin, streams response to stdout
+- Phase 3 app mode: `yaptap` (no args) → menu bar icon, global hotkey ⌥Space starts/stops recording, result goes to clipboard
+- Config file at `~/.config/yaptap/config.toml` (created on first launch)
+- Single-instance guard via `~/.config/yaptap/yaptap.lock`
+- `cargo clippy -- -D warnings` must pass; `#![allow(unexpected_cfgs)]` in app.rs suppresses objc macro noise
 
