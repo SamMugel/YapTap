@@ -26,11 +26,12 @@ Detailed specs: [cli.md](cli.md), [audio-recording.md](audio-recording.md), [tra
 Detailed specs: [prompts.md](prompts.md), [llm.md](llm.md)
 
 ### Deliverables
-- CLI flags `--prompt <name>`, `--prompt-file <path>`, `--llm-model <name>`, `--model <name>`, `--list-prompts`.
+- CLI flags `--prompt <name>`, `--prompt-file <path>`, `--llm-model <name>`, `--llm-provider <name>`, `--model <name>`, `--list-prompts`.
 - Bundled default prompts in `config/prompts/` (TOML format).
 - `yaptap --list-prompts` prints available prompts from `config/prompts/` and exits.
-- After transcription, Rust spawns `python3 src/core/llm.py --prompt-file <path>` with transcript piped to stdin.
-- `llm.py` calls ollama, streams tokens to stdout; Rust echoes them in real time.
+- After transcription, Rust spawns `python3 src/core/llm.py --prompt-file <path> [--model <name>] [--provider <name>]` with transcript piped to stdin.
+- `llm.py` calls the configured LLM provider (ollama or CompactifAI), streams tokens to stdout; Rust echoes them in real time.
+- `llm_provider` config field selects the provider (`"ollama"` default, `"compactifai"` for cloud); `--llm-provider` CLI flag overrides it per-invocation.
 - Status line `Thinking...` printed between `Transcribing...` and the first LLM token.
 - Without `--prompt` / `--prompt-file`, `yaptap` behaves as in phase 1 (print raw transcript).
 

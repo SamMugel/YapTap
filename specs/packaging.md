@@ -135,7 +135,7 @@ If the venv is absent, the binary:
 2. Runs the following commands in a background thread (sequentially):
    ```sh
    python3 -m venv ~/.config/yaptap/.venv
-   ~/.config/yaptap/.venv/bin/pip install --quiet "numpy<2" openai-whisper ollama tomli
+   ~/.config/yaptap/.venv/bin/pip install --quiet "numpy<2" openai-whisper ollama openai tomli
    ```
 
 3. Checks `which ffmpeg` after pip install completes. If ffmpeg is not on PATH, shows a separate one-time alert:
@@ -151,11 +151,11 @@ If the venv is absent, the binary:
 On every launch (not just first launch), the binary calls `venv_healthy()` before spawning any Python subprocess. `venv_healthy()` returns `true` if:
 
 1. `~/.config/yaptap/.venv/bin/python` exists, AND
-2. The venv's `pip` can resolve `openai-whisper`, `ollama`, and `tomli` (fast import check, not a network call).
+2. The venv's `pip` can resolve `openai-whisper`, `ollama`, `openai`, and `tomli` (fast import check, not a network call).
 
 If the venv exists but `venv_healthy()` returns `false` (e.g. after a macOS upgrade broke the interpreter), a two-stage repair is attempted:
 
-1. **In-place repair:** run `pip install --quiet "numpy<2" tomli` inside the existing venv. If this succeeds and `venv_healthy()` passes, continue normally.
+1. **In-place repair:** run `pip install --quiet "numpy<2" openai-whisper ollama openai tomli` inside the existing venv. If this succeeds and `venv_healthy()` passes, continue normally.
 2. **Full teardown:** if pip repair fails, delete `~/.config/yaptap/.venv/` entirely and re-run the full setup sequence (venv create + full pip install). Shows the same "Setting up YapTap…" alert during repair.
 
 This avoids unnecessary full re-installs for common breakage patterns (missing packages) while still recovering from corrupt interpreter states.

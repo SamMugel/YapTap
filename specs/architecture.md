@@ -13,7 +13,7 @@
 | Audio capture | Rust | OS-level audio API (`cpal`); requires low-latency, no GIL |
 | Process orchestration / CLI | Rust | Binary entrypoint, signal handling, subprocess management |
 | Transcription | Python (subprocess) | Whisper is a Python library; called via `transcribe.py` |
-| LLM inference (phase 2+) | Python (subprocess) | Ollama Python client; called via `llm.py` |
+| LLM inference (phase 2+) | Python (subprocess) | Ollama or CompactifAI client; called via `llm.py` |
 | Global hotkey / event tap (phase 3+) | Rust | macOS `CGEventTap` — OS-critical |
 | Clipboard / cursor injection (phase 4) | Rust | macOS `NSPasteboard` / `CGEvent` — OS-critical |
 
