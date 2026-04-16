@@ -27,45 +27,6 @@
   },
   "tasks": [
     {
-      "id": "P8-T001",
-      "section": "makefile",
-      "title": "Create `Makefile` at project root with `build`, `icns`, `app`, `dmg`, and `clean` targets",
-      "description": "Create `Makefile` at the project root (source-controlled). Content must match `specs/packaging.md` exactly.\n\n- `build`: `cargo build --release`\n- `icns`: generates all ten iconset sizes from `assets/icons/yaptap-idle@2x.png` via `sips`, then runs `iconutil -c icns $(ICONSET) -o $(ICNS)` to produce `assets/icons/YapTap.icns`\n- `app` (depends on `build icns`): runs `rm -rf $(APP_DIR)`, creates all subdirectories, copies binary to `Contents/MacOS/`, `assets/Info.plist` to `Contents/`, all `.toml` prompts to `Contents/Resources/config/prompts/`, all four icon PNGs to `Contents/Resources/icons/`, `src/core/transcribe.py` and `llm.py` to `Contents/Resources/scripts/`, and `YapTap.icns` to `Contents/Resources/`\n- `dmg` (depends on `app`): runs `rm -rf $(STAGING_DIR) $(DMG_PATH)`, creates staging dir, copies app, creates `/Applications` symlink, runs `hdiutil create -volname YapTap -srcfolder $(STAGING_DIR) -ov -format UDZO $(DMG_PATH)`, removes staging, prints `Built: $(DMG_PATH)`\n- `clean`: `cargo clean && rm -rf $(DIST) $(ICONSET) $(ICNS)`\n\nAll five targets declared `.PHONY`. Variable names: `DIST`, `APP_DIR`, `CONTENTS`, `STAGING_DIR`, `DMG_PATH`, `SOURCE_ICON`, `ICONSET`, `ICNS`.",
-      "checks": [
-        "Run `make build` — exit 0 and `target/release/yaptap` exists.",
-        "Run `make icns` — `assets/icons/AppIcon.iconset/` contains all ten PNGs and `assets/icons/YapTap.icns` is generated.",
-        "Run `make app` — `dist/YapTap.app/Contents/MacOS/yaptap` is executable, `Contents/Info.plist` exists, `Contents/Resources/config/prompts/` contains all TOML files, `Contents/Resources/icons/` contains all four PNGs, `Contents/Resources/scripts/transcribe.py` and `llm.py` exist, `Contents/Resources/YapTap.icns` exists.",
-        "Run `make dmg` — `dist/YapTap.dmg` is created and the terminal prints 'Built: dist/YapTap.dmg'.",
-        "Run `make clean` — `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` are all removed."
-      ],
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P8-T002",
-      "section": "bundle-metadata",
-      "title": "Create `assets/Info.plist` with all required bundle keys",
-      "description": "Create `assets/Info.plist` (source-controlled; copied into the bundle by `make app`). Required keys and values per `specs/packaging.md`:\n\n| Key | Value |\n|-----|-------|\n| CFBundleIdentifier | com.yaptap.app |\n| CFBundleName | YapTap |\n| CFBundleDisplayName | YapTap |\n| CFBundleVersion | 0.3.0 |\n| CFBundleShortVersionString | 0.3 |\n| CFBundleIconFile | YapTap |\n| CFBundleExecutable | yaptap |\n| CFBundlePackageType | APPL |\n| LSUIElement | true (boolean, NOT string) |\n| LSMinimumSystemVersion | 12.0 |\n| NSHighResolutionCapable | true (boolean) |\n| NSMicrophoneUsageDescription | YapTap records audio to transcribe your speech. |\n| NSPrincipalClass | NSApplication |",
-      "checks": [
-        "Run `plutil -lint assets/Info.plist` — exit 0 (valid XML plist).",
-        "Run `plutil -p assets/Info.plist` and confirm all 13 keys are present with correct values.",
-        "Confirm LSUIElement is boolean `1` (not string `true`) in the plutil output.",
-        "Run `make app` and confirm `dist/YapTap.app/Contents/Info.plist` is byte-identical to `assets/Info.plist`."
-      ],
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P8-T003",
-      "section": "gitignore",
-      "title": "Add `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` to `.gitignore`",
-      "description": "Append three lines to `.gitignore` (all generated artifacts). The existing entries (`/target/`, `**/__pycache__/`, `*.pyc`) must be preserved unchanged.",
-      "checks": [
-        "Confirm all three new lines are present in `.gitignore` alongside the existing entries.",
-        "Run `make app` then `git status` — `dist/` and generated icon files do not appear as untracked.",
-        "Confirm `assets/Info.plist` and `Makefile` DO appear as untracked (they are source-controlled)."
-      ],
-      "implementation_status": "to do"
-    },
-    {
       "id": "P8-T004",
       "section": "resource-path-resolution",
       "title": "Add `pub fn resources_dir() -> PathBuf` to `src/config.rs`",
@@ -73,6 +34,18 @@
       "checks": [
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "After `make app`: launch `dist/YapTap.app/Contents/MacOS/yaptap --list-prompts` — prompts listed match those in `Contents/Resources/config/prompts/` (confirms Resources/ resolved correctly)."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T008",
+      "section": "python-interpreter",
+      "title": "Add `pub fn python_interpreter() -> String` to `src/config.rs`",
+      "description": "Add a helper that returns the Python interpreter path for all subprocess calls, per `specs/packaging.md` 'Python Interpreter for Subprocesses':\n\n```rust\npub fn python_interpreter() -> String {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_else(|| std::path::PathBuf::from(\".\"))\n        .join(\".config/yaptap/.venv/bin/python\");\n    if venv_python.is_file() {\n        venv_python.to_string_lossy().into_owned()\n    } else {\n        \"python3\".to_string()\n    }\n}\n```\n\nReturns the absolute venv interpreter path if `~/.config/yaptap/.venv/bin/python` exists as a file; otherwise falls back to `\"python3\"` (PATH lookup). Called by `run_transcription()` and `run_llm_collect()`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With venv absent: `python_interpreter()` returns `\"python3\"`.",
+        "After first-launch setup creates the venv: `python_interpreter()` returns an absolute path ending in `/.venv/bin/python`."
       ],
       "implementation_status": "to do"
     },
@@ -109,18 +82,6 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Dev build from project root with a prompt selected: trigger a recording cycle — LLM step succeeds (resolves via candidate 2).",
         "After `make app` with a prompt selected: trigger a recording cycle from the bundled binary — LLM step does not fail with 'can't open file' for llm.py."
-      ],
-      "implementation_status": "to do"
-    },
-    {
-      "id": "P8-T008",
-      "section": "python-interpreter",
-      "title": "Add `pub fn python_interpreter() -> String` to `src/config.rs`",
-      "description": "Add a helper that returns the Python interpreter path for all subprocess calls, per `specs/packaging.md` 'Python Interpreter for Subprocesses':\n\n```rust\npub fn python_interpreter() -> String {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_else(|| std::path::PathBuf::from(\".\"))\n        .join(\".config/yaptap/.venv/bin/python\");\n    if venv_python.is_file() {\n        venv_python.to_string_lossy().into_owned()\n    } else {\n        \"python3\".to_string()\n    }\n}\n```\n\nReturns the absolute venv interpreter path if `~/.config/yaptap/.venv/bin/python` exists as a file; otherwise falls back to `\"python3\"` (PATH lookup). Called by `run_transcription()` and `run_llm_collect()`.",
-      "checks": [
-        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
-        "With venv absent: `python_interpreter()` returns `\"python3\"`.",
-        "After first-launch setup creates the venv: `python_interpreter()` returns an absolute path ending in `/.venv/bin/python`."
       ],
       "implementation_status": "to do"
     },
@@ -187,18 +148,6 @@
       "implementation_status": "to do"
     },
     {
-      "id": "P8-T014",
-      "section": "whisper-model",
-      "title": "Write Whisper model download warning to stderr in `src/core/transcribe.py` before `load_model()`",
-      "description": "Per `specs/packaging.md`: 'transcribe.py writes a single log line to stderr before loading: \"Downloading Whisper base model (~145 MB) — first use only…\"'. The Rust binary captures and ignores all stderr in app mode; in CLI mode the user sees it on the terminal.\n\nIn `transcribe()` in `src/core/transcribe.py`, add a print to stderr immediately before `whisper.load_model(model_name)`:\n\n```python\nprint(\n    f\"Downloading Whisper {model_name} model — first use only (may take 1–3 minutes)…\",\n    file=sys.stderr,\n)\nmodel = whisper.load_model(model_name)\n```\n\nThe `sys` import is already present.",
-      "checks": [
-        "Confirm the `print(…, file=sys.stderr)` line appears immediately before `whisper.load_model(model_name)` in `transcribe()`.",
-        "Run `python3 src/core/transcribe.py <wav_path> 2>&1 | grep -i download` — confirm the line appears.",
-        "In app mode: the line is captured by Rust's stderr pipe and never shown to the user — no change in app behaviour."
-      ],
-      "implementation_status": "to do"
-    },
-    {
       "id": "P8-T015",
       "section": "ollama-check",
       "title": "Add `fn ollama_available() -> bool` to `src/app.rs`",
@@ -224,10 +173,61 @@
       "implementation_status": "to do"
     },
     {
+      "id": "P8-T014",
+      "section": "whisper-model",
+      "title": "Write Whisper model download warning to stderr in `src/core/transcribe.py` before `load_model()`",
+      "description": "Per `specs/packaging.md`: 'transcribe.py writes a single log line to stderr before loading: \"Downloading Whisper base model (~145 MB) — first use only…\"'. The Rust binary captures and ignores all stderr in app mode; in CLI mode the user sees it on the terminal.\n\nIn `transcribe()` in `src/core/transcribe.py`, add a print to stderr immediately before `whisper.load_model(model_name)`:\n\n```python\nprint(\n    f\"Downloading Whisper {model_name} model — first use only (may take 1–3 minutes)…\",\n    file=sys.stderr,\n)\nmodel = whisper.load_model(model_name)\n```\n\nThe `sys` import is already present.",
+      "checks": [
+        "Confirm the `print(…, file=sys.stderr)` line appears immediately before `whisper.load_model(model_name)` in `transcribe()`.",
+        "Run `python3 src/core/transcribe.py <wav_path> 2>&1 | grep -i download` — confirm the line appears.",
+        "In app mode: the line is captured by Rust's stderr pipe and never shown to the user — no change in app behaviour."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T002",
+      "section": "bundle-metadata",
+      "title": "Create `assets/Info.plist` with all required bundle keys",
+      "description": "Create `assets/Info.plist` (source-controlled; copied into the bundle by `make app`). Required keys and values per `specs/packaging.md`:\n\n| Key | Value |\n|-----|-------|\n| CFBundleIdentifier | com.yaptap.app |\n| CFBundleName | YapTap |\n| CFBundleDisplayName | YapTap |\n| CFBundleVersion | 0.3.0 |\n| CFBundleShortVersionString | 0.3 |\n| CFBundleIconFile | YapTap |\n| CFBundleExecutable | yaptap |\n| CFBundlePackageType | APPL |\n| LSUIElement | true (boolean, NOT string) |\n| LSMinimumSystemVersion | 12.0 |\n| NSHighResolutionCapable | true (boolean) |\n| NSMicrophoneUsageDescription | YapTap records audio to transcribe your speech. |\n| NSPrincipalClass | NSApplication |",
+      "checks": [
+        "Run `plutil -lint assets/Info.plist` — exit 0 (valid XML plist).",
+        "Run `plutil -p assets/Info.plist` and confirm all 13 keys are present with correct values.",
+        "Confirm LSUIElement is boolean `1` (not string `true`) in the plutil output.",
+        "Run `make app` and confirm `dist/YapTap.app/Contents/Info.plist` is byte-identical to `assets/Info.plist`."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T001",
+      "section": "makefile",
+      "title": "Create `Makefile` at project root with `build`, `icns`, `app`, `dmg`, and `clean` targets",
+      "description": "Create `Makefile` at the project root (source-controlled). Content must match `specs/packaging.md` exactly.\n\n- `build`: `cargo build --release`\n- `icns`: generates all ten iconset sizes from `assets/icons/yaptap-idle@2x.png` via `sips`, then runs `iconutil -c icns $(ICONSET) -o $(ICNS)` to produce `assets/icons/YapTap.icns`\n- `app` (depends on `build icns`): runs `rm -rf $(APP_DIR)`, creates all subdirectories, copies binary to `Contents/MacOS/`, `assets/Info.plist` to `Contents/`, all `.toml` prompts to `Contents/Resources/config/prompts/`, all four icon PNGs to `Contents/Resources/icons/`, `src/core/transcribe.py` and `llm.py` to `Contents/Resources/scripts/`, and `YapTap.icns` to `Contents/Resources/`\n- `dmg` (depends on `app`): runs `rm -rf $(STAGING_DIR) $(DMG_PATH)`, creates staging dir, copies app, creates `/Applications` symlink, runs `hdiutil create -volname YapTap -srcfolder $(STAGING_DIR) -ov -format UDZO $(DMG_PATH)`, removes staging, prints `Built: $(DMG_PATH)`\n- `clean`: `cargo clean && rm -rf $(DIST) $(ICONSET) $(ICNS)`\n\nAll five targets declared `.PHONY`. Variable names: `DIST`, `APP_DIR`, `CONTENTS`, `STAGING_DIR`, `DMG_PATH`, `SOURCE_ICON`, `ICONSET`, `ICNS`.",
+      "checks": [
+        "Run `make build` — exit 0 and `target/release/yaptap` exists.",
+        "Run `make icns` — `assets/icons/AppIcon.iconset/` contains all ten PNGs and `assets/icons/YapTap.icns` is generated.",
+        "Run `make app` — `dist/YapTap.app/Contents/MacOS/yaptap` is executable, `Contents/Info.plist` exists, `Contents/Resources/config/prompts/` contains all TOML files, `Contents/Resources/icons/` contains all four PNGs, `Contents/Resources/scripts/transcribe.py` and `llm.py` exist, `Contents/Resources/YapTap.icns` exists.",
+        "Run `make dmg` — `dist/YapTap.dmg` is created and the terminal prints 'Built: dist/YapTap.dmg'.",
+        "Run `make clean` — `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` are all removed."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T003",
+      "section": "gitignore",
+      "title": "Add `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` to `.gitignore`",
+      "description": "Append three lines to `.gitignore` (all generated artifacts). The existing entries (`/target/`, `**/__pycache__/`, `*.pyc`) must be preserved unchanged.",
+      "checks": [
+        "Confirm all three new lines are present in `.gitignore` alongside the existing entries.",
+        "Run `make app` then `git status` — `dist/` and generated icon files do not appear as untracked.",
+        "Confirm `assets/Info.plist` and `Makefile` DO appear as untracked (they are source-controlled)."
+      ],
+      "implementation_status": "to do"
+    },
+    {
       "id": "P8-T017",
       "section": "verification",
       "title": "Verify `cargo build --release`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
-      "description": "After completing P8-T001 through P8-T016, run a full build, lint, and test pass to confirm no regressions.",
+      "description": "After completing P8-T004 through P8-T016, run a full build, lint, and test pass to confirm no regressions.",
       "checks": [
         "Run `cargo build --release` — exit 0.",
         "Run `cargo clippy -- -D warnings` — no warnings, exit 0.",
@@ -273,7 +273,7 @@
       "description": "Verify the first-launch Python setup flow end-to-end.",
       "checks": [
         "Remove the venv: `rm -rf ~/.config/yaptap/.venv`.",
-        "Launch `dist/YapTap.app` from Finder — 'Setting up YapTap…' alert appears within 1 second with no buttons.",
+        "Launch `dist/YapTap.app` from Finder — 'Setting up YapTap…' alert window appears within 1 second with no buttons.",
         "Alert auto-dismisses after ~30 seconds.",
         "Confirm `~/.config/yaptap/.venv/bin/python` and `.venv/bin/pip` exist.",
         "Press the hotkey, speak, stop — transcription succeeds (venv python used; no 'python not found' error).",
