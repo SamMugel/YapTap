@@ -161,6 +161,66 @@ pub fn show_alert(_title: &str, message: &str, buttons: &[&str]) -> usize {
     }
 }
 
+// ── NSAlert + NSTextField API key dialog ─────────────────────────────────────
+
+/// Show a modal NSAlert with a secure text field to capture an API key.
+/// Returns `Some(key)` on Save (non-empty), `None` on Cancel or empty input.
+fn show_api_key_dialog() -> Option<String> {
+    // SAFETY: Cocoa objects obtained from documented AppKit factory methods.
+    // Only ever called from the main thread.
+    use cocoa::foundation::{NSPoint, NSRect, NSSize};
+    unsafe {
+        let alert: id = msg_send![objc::class!(NSAlert), new];
+
+        let title_cstr = CString::new("CompactifAI API Key Required").unwrap_or_default();
+        let title_ns: id = msg_send![objc::class!(NSString), alloc];
+        let title_ns: id = msg_send![title_ns, initWithUTF8String: title_cstr.as_ptr()];
+        let (): () = msg_send![alert, setMessageText: title_ns];
+
+        let msg_cstr =
+            CString::new("Enter your MULTIVERSE_IAM_API_KEY to continue.").unwrap_or_default();
+        let msg_ns: id = msg_send![objc::class!(NSString), alloc];
+        let msg_ns: id = msg_send![msg_ns, initWithUTF8String: msg_cstr.as_ptr()];
+        let (): () = msg_send![alert, setInformativeText: msg_ns];
+
+        let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 22.0));
+        let field: id = msg_send![objc::class!(NSSecureTextField), alloc];
+        let field: id = msg_send![field, initWithFrame: frame];
+        let (): () = msg_send![alert, setAccessoryView: field];
+
+        let save_cstr = CString::new("Save").unwrap_or_default();
+        let save_ns: id = msg_send![objc::class!(NSString), alloc];
+        let save_ns: id = msg_send![save_ns, initWithUTF8String: save_cstr.as_ptr()];
+        let (): () = msg_send![alert, addButtonWithTitle: save_ns];
+
+        let cancel_cstr = CString::new("Cancel").unwrap_or_default();
+        let cancel_ns: id = msg_send![objc::class!(NSString), alloc];
+        let cancel_ns: id = msg_send![cancel_ns, initWithUTF8String: cancel_cstr.as_ptr()];
+        let (): () = msg_send![alert, addButtonWithTitle: cancel_ns];
+
+        let response: isize = msg_send![alert, runModal];
+        if response == 1000 {
+            let ns_str: id = msg_send![field, stringValue];
+            let c_str: *const std::os::raw::c_char = msg_send![ns_str, UTF8String];
+            if c_str.is_null() {
+                None
+            } else {
+                let s = std::ffi::CStr::from_ptr(c_str)
+                    .to_string_lossy()
+                    .trim()
+                    .to_string();
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s)
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
 // ── Single-instance guard ─────────────────────────────────────────────────────
 
 fn lock_path() -> PathBuf {
@@ -615,16 +675,61 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 
     // ── LLM (if a prompt is selected) ────────────────────────────────────────
     let output = if !config.selected_prompt.is_empty() {
-        // Probe Ollama availability before attempting the LLM step.
-        if !ollama_available() {
+        // Probe Ollama availability only when using the ollama provider.
+        if config.llm_provider == "ollama" && !ollama_available() {
             anyhow::bail!(
                 "Ollama not running. Start Ollama and try again.\n\
                  Run `ollama serve` in a terminal, or open the Ollama app."
             );
         }
+
+        // Resolve API key for compactifai provider.
+        let api_key: Option<String> = if config.llm_provider == "compactifai" {
+            // Check environment first, then keychain.
+            let from_env = std::env::var("MULTIVERSE_IAM_API_KEY").ok().filter(|k| !k.is_empty());
+            if from_env.is_some() {
+                from_env
+            } else {
+                let from_keychain = crate::keychain::keychain_get_api_key();
+                if from_keychain.is_some() {
+                    from_keychain
+                } else {
+                    // No key found — prompt via dialog.
+                    match show_api_key_dialog() {
+                        Some(key) => {
+                            if let Err(e) = crate::keychain::keychain_set_api_key(&key) {
+                                tracing::warn!(error = %e, "failed to save API key to keychain");
+                            }
+                            Some(key)
+                        }
+                        None => {
+                            show_alert(
+                                "API Key Required",
+                                "CompactifAI provider requires an API key. Recording cancelled.",
+                                &["OK"],
+                            );
+                            let mut state_guard =
+                                shared.state.lock().unwrap_or_else(|e| e.into_inner());
+                            *state_guard = AppState::Idle;
+                            return Ok(String::new());
+                        }
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
-            crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &config.llm_provider, None, &shared.child)?
+            crate::llm::run_llm_collect(
+                &transcript,
+                &prompt_path,
+                &config.llm_model,
+                &config.llm_provider,
+                api_key.as_deref(),
+                &shared.child,
+            )?
         } else {
             transcript
         }

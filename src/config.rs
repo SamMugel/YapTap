@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub selected_prompt: String,
     pub whisper_model: String,
     pub llm_model: String,
+    pub llm_provider: String,
 }
 
 impl Default for AppConfig {
@@ -23,6 +24,7 @@ impl Default for AppConfig {
             selected_prompt: String::new(),
             whisper_model: "base".to_string(),
             llm_model: "llama3".to_string(),
+            llm_provider: "ollama".to_string(),
         }
     }
 }
@@ -33,12 +35,13 @@ impl Default for AppConfig {
 const DEFAULT_CONFIG_TOML: &str = "\
 # YapTap configuration
 # hotkey: change via in-app dialog (takes effect immediately), or edit here and restart
-# whisper_model, llm_model: edit here and restart to apply
+# whisper_model, llm_model, llm_provider: edit here and restart to apply
 
 hotkey = \"option+space\"    # global hotkey to start/stop recording
 selected_prompt = \"\"       # stem of selected prompt file; empty = No Prompt
 whisper_model = \"base\"     # Whisper model for transcription
-llm_model = \"llama3\"       # Ollama model for LLM inference
+llm_model = \"llama3\"       # model name for the active LLM provider (see llm_provider)
+llm_provider = \"ollama\"    # LLM provider: \"ollama\" (local) or \"compactifai\" (cloud)
 ";
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
@@ -208,6 +211,16 @@ impl AppConfig {
                 "Unknown hotkey \"{bad_hotkey}\" — using default: option+space."
             ));
             cfg.hotkey = "option+space".to_string();
+        }
+
+        // Validate llm_provider.
+        if cfg.llm_provider != "ollama" && cfg.llm_provider != "compactifai" {
+            let bad = cfg.llm_provider.clone();
+            tracing::warn!(value = %bad, "unknown llm_provider — using default: ollama");
+            warnings.push(format!(
+                "Unknown llm_provider '{bad}' — using default: ollama."
+            ));
+            cfg.llm_provider = "ollama".to_string();
         }
 
         // Validate selected_prompt: reset if no matching .toml in prompts_dir.

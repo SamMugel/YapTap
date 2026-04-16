@@ -353,7 +353,7 @@ fn main() -> Result<()> {
                     let zshrc_path = dirs::home_dir()
                         .unwrap_or_else(|| std::path::PathBuf::from("."))
                         .join(".zshrc");
-                    let export_line = format!("\nexport MULTIVERSE_IAM_API_KEY=\"{}\"\n", key_input);
+                    let export_line = format!("\nexport MULTIVERSE_IAM_API_KEY=\"{key_input}\"\n");
                     if let Err(e) = std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)

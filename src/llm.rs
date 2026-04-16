@@ -51,6 +51,8 @@ fn llm_script_path() -> PathBuf {
 ///
 /// # Contract
 /// - Passes `--prompt-file <prompt_path>` and `--model <model>` to `llm.py`.
+/// - Passes `--provider <provider>` to `llm.py`.
+/// - If `api_key` is `Some`, injects `MULTIVERSE_IAM_API_KEY` into the subprocess environment.
 /// - Writes `transcript` to the child's stdin, then closes stdin.
 /// - Stores the spawned [`Child`] in `active_child` (replacing any previous
 ///   value) so external callers can interrupt it.
@@ -61,6 +63,8 @@ pub fn run_llm_collect(
     transcript: &str,
     prompt_path: &Path,
     model: &str,
+    provider: &str,
+    api_key: Option<&str>,
     active_child: &Arc<Mutex<Option<Child>>>,
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
@@ -70,12 +74,18 @@ pub fn run_llm_collect(
         .arg("--prompt-file")
         .arg(prompt_path)
         .args(["--model", model])
+        .args(["--provider", provider])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("PATH", crate::config::brew_augmented_path());
 
+    if let Some(key) = api_key {
+        cmd.env("MULTIVERSE_IAM_API_KEY", key);
+    }
+
     // ── Spawn ─────────────────────────────────────────────────────────────────
+    tracing::debug!(provider = %provider, has_api_key = api_key.is_some(), model = %model, "spawning llm.py");
     let mut child = cmd.spawn().context("while spawning python3 llm.py")?;
 
     // ── Write transcript to stdin then close it ───────────────────────────────
