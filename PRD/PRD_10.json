@@ -3,6 +3,7 @@
   "phase_name": "Fix: numpy 2.x ABI incompatibility breaks openai-whisper transcription",
   "goal": "openai-whisper's C extensions (via numba/torch) were compiled against the NumPy 1.x ABI. NumPy 2.0 introduced breaking changes to its C ABI; loading those extensions under numpy 2.x raises an error matching 'A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x'. The fix has two parts: (1) pin 'numpy<2' in the first-launch pip install so new venvs always get a compatible numpy; (2) auto-detect a broken existing venv at startup (numpy>=2 installed) and delete it so first-launch setup re-runs with the corrected pin.",
   "root_cause": "run_setup_commands() installs 'openai-whisper ollama' without a numpy version constraint. pip resolves numpy to the latest release (2.0.2 at time of writing). openai-whisper's transitive dependency numba ships pre-built wheels compiled against the numpy 1.x C API, which is binary-incompatible with numpy 2.x.",
+  "architecture_note": "The venv python is the Xcode universal binary (/usr/bin/python3, Python 3.9.6). Under x86_64 Rosetta (the yaptap process), numpy 2.0.2 imports but torch logs '_ARRAY_API not found' — its numpy bridge is broken. With numpy<2 (1.26.4), whisper imports clean (exit 0, no warnings). Architecture mismatch (.so x86_64 vs ARM64 native terminal) is only visible when testing from the ARM64 shell, not at app runtime.",
   "tasks": [
     {
       "id": "P10-T001",
@@ -14,7 +15,7 @@
         "Remove `~/.config/yaptap/.venv/`.",
         "Call `run_setup_commands()` (e.g. via a fresh launch without venv): confirm the installed numpy version is 1.x via `~/.config/yaptap/.venv/bin/pip show numpy | grep Version`."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P10-T002",
@@ -27,7 +28,7 @@
         "With numpy 1.x venv present: `venv_numpy_ok()` returns `true`.",
         "With no venv: `venv_numpy_ok()` returns `true`."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P10-T003",
@@ -40,7 +41,7 @@
         "With numpy 1.x venv present: launch the app — setup alert does NOT appear; startup proceeds directly to tray icon.",
         "With no venv: setup alert appears as before."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P10-T004",
@@ -52,7 +53,7 @@
         "Run `cargo clippy -- -D warnings` — no warnings.",
         "Run `cargo test` — all 10 tests pass."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P10-T005",
@@ -65,7 +66,7 @@
         "Transcription succeeds — clipboard receives non-empty text.",
         "No 'transcription failed — A module compiled using NumPy 1.x' alert."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     }
   ]
 }
