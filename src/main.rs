@@ -16,6 +16,7 @@ mod config;
 mod hotkey;
 mod llm;
 mod transcription;
+mod keychain;
 
 use std::{
     io::{self, Write},
