@@ -614,10 +614,11 @@ fn build_menu(
 fn run_pipeline_thread(
     shared: Arc<SharedState>,
     config: AppConfig,
+    api_key: Option<String>,
     sender: Arc<mpsc::Sender<AppEvent>>,
 ) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_pipeline_inner(&shared, &config)
+        run_pipeline_inner(&shared, &config, api_key)
     }));
 
     let event = match result {
@@ -628,7 +629,11 @@ fn run_pipeline_thread(
     let _ = sender.send(event);
 }
 
-fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Result<String> {
+fn run_pipeline_inner(
+    shared: &SharedState,
+    config: &AppConfig,
+    api_key: Option<String>,
+) -> anyhow::Result<String> {
     // ── Pre-flight checks ─────────────────────────────────────────────────────
     let py_ok = std::process::Command::new("python3")
         .arg("--version")
@@ -683,38 +688,13 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
             );
         }
 
-        // Resolve API key for compactifai provider.
-        let api_key: Option<String> = if config.llm_provider == "compactifai" {
-            // Check environment first, then keychain.
-            let from_env = std::env::var("MULTIVERSE_IAM_API_KEY").ok().filter(|k| !k.is_empty());
-            if from_env.is_some() {
-                from_env
-            } else {
-                let from_keychain = crate::keychain::keychain_get_api_key();
-                if from_keychain.is_some() {
-                    from_keychain
-                } else {
-                    // No key found — prompt via dialog.
-                    match show_api_key_dialog() {
-                        Some(key) => {
-                            if let Err(e) = crate::keychain::keychain_set_api_key(&key) {
-                                tracing::warn!(error = %e, "failed to save API key to keychain");
-                            }
-                            Some(key)
-                        }
-                        None => {
-                            show_alert(
-                                "API Key Required",
-                                "CompactifAI provider requires an API key. Recording cancelled.",
-                                &["OK"],
-                            );
-                            let mut state_guard =
-                                shared.state.lock().unwrap_or_else(|e| e.into_inner());
-                            *state_guard = AppState::Idle;
-                            return Ok(String::new());
-                        }
-                    }
-                }
+        // API key was pre-resolved on the main thread before this pipeline was spawned.
+        let api_key = if config.llm_provider == "compactifai" {
+            match api_key {
+                Some(key) => Some(key),
+                None => anyhow::bail!(
+                    "CompactifAI API key not available — set MULTIVERSE_IAM_API_KEY or use the CLI to configure it"
+                ),
             }
         } else {
             None
@@ -1164,17 +1144,88 @@ pub fn run_app() {
                             // firing if the device disconnects during teardown
                             // (P6-I006).
                             shared.recording_active.store(false, Ordering::SeqCst);
-                            // Stop recording and kick off the pipeline.
-                            *shared.state.lock().unwrap() = AppState::Processing;
-                            // Sync menu label to "Processing…" immediately (P6-I002).
-                            rebuild_menu(&tray, &mut menu_actions, &config, &AppState::Processing);
-                            // Icon stays active (orange) during processing.
-                            let shared_clone = Arc::clone(&shared);
-                            let config_clone = config.clone();
-                            let tx_clone = Arc::clone(&app_event_tx);
-                            thread::spawn(move || {
-                                run_pipeline_thread(shared_clone, config_clone, tx_clone);
-                            });
+
+                            // Resolve the CompactifAI API key on the main thread —
+                            // AppKit dialog APIs must not be called from a background thread.
+                            let api_key_result: Result<Option<String>, ()> =
+                                if config.llm_provider == "compactifai"
+                                    && !config.selected_prompt.is_empty()
+                                {
+                                    let from_env = std::env::var("MULTIVERSE_IAM_API_KEY")
+                                        .ok()
+                                        .filter(|k| !k.is_empty());
+                                    if let Some(key) = from_env {
+                                        Ok(Some(key))
+                                    } else if let Some(key) =
+                                        crate::keychain::keychain_get_api_key()
+                                    {
+                                        Ok(Some(key))
+                                    } else {
+                                        match show_api_key_dialog() {
+                                            Some(key) => {
+                                                if let Err(e) =
+                                                    crate::keychain::keychain_set_api_key(&key)
+                                                {
+                                                    tracing::warn!(
+                                                        error = %e,
+                                                        "failed to save API key to keychain"
+                                                    );
+                                                }
+                                                Ok(Some(key))
+                                            }
+                                            None => {
+                                                show_alert(
+                                                    "API Key Required",
+                                                    "CompactifAI provider requires an API key. Recording cancelled.",
+                                                    &["OK"],
+                                                );
+                                                while app_event_rx.try_recv().is_ok() {}
+                                                Err(())
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Ok(None)
+                                };
+
+                            match api_key_result {
+                                Err(()) => {
+                                    // User cancelled — discard the recorded audio and reset.
+                                    if let Ok(mut guard) = shared.audio.lock() {
+                                        drop(guard.take());
+                                    }
+                                    *shared.state.lock().unwrap() = AppState::Idle;
+                                    switch_icon(&tray, &AppState::Idle);
+                                    rebuild_menu(
+                                        &tray,
+                                        &mut menu_actions,
+                                        &config,
+                                        &AppState::Idle,
+                                    );
+                                }
+                                Ok(api_key) => {
+                                    // Proceed: transition to Processing and spawn pipeline.
+                                    *shared.state.lock().unwrap() = AppState::Processing;
+                                    // Sync menu label to "Processing…" immediately (P6-I002).
+                                    rebuild_menu(
+                                        &tray,
+                                        &mut menu_actions,
+                                        &config,
+                                        &AppState::Processing,
+                                    );
+                                    let shared_clone = Arc::clone(&shared);
+                                    let config_clone = config.clone();
+                                    let tx_clone = Arc::clone(&app_event_tx);
+                                    thread::spawn(move || {
+                                        run_pipeline_thread(
+                                            shared_clone,
+                                            config_clone,
+                                            api_key,
+                                            tx_clone,
+                                        );
+                                    });
+                                }
+                            }
                         }
                         AppState::Processing => {
                             // Hotkey pressed while pipeline is running — ignore.
