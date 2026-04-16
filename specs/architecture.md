@@ -141,8 +141,9 @@ Note: user-facing terminal output (the transcript, status lines) uses `println!`
 
 ### Python
 - `openai-whisper` — transcription
-- `ollama` — LLM client (phase 2)
-- Standard library: `argparse`, `sys`, `pathlib`, `logging`, `tomllib` (Python 3.11+)
+- `ollama` — LLM client for `ollama` provider (phase 2)
+- `openai` — LLM client for `compactifai` provider (OpenAI-compatible SDK, phase 2)
+- Standard library: `argparse`, `sys`, `os`, `pathlib`, `logging`, `tomllib` (Python 3.11+)
 
 > **Phase 3 note:** Both packages are installed automatically into `~/.config/yaptap/.venv/` on first launch of the `.app` bundle. For CLI/development use (phases 1 & 2) they must be installed manually. See [packaging.md](packaging.md).
 
@@ -211,3 +212,4 @@ YapTap/
 - [`tray-icon`](https://crates.io/crates/tray-icon) — macOS menu bar icon and native dropdown menu
 - [`rdev`](https://crates.io/crates/rdev) — global keyboard event listener (wraps `CGEventTap` on macOS)
 - [`arboard`](https://crates.io/crates/arboard) — clipboard read/write (`NSPasteboard` on macOS)
+- [`security-framework`](https://crates.io/crates/security-framework) — macOS Keychain read/write for storing `MULTIVERSE_IAM_API_KEY` when entered via in-app dialog

@@ -3,7 +3,7 @@
 ## Invocation
 
 ```
-$ yaptap [--prompt <name> | --prompt-file <path>] [--model <whisper_model>] [--llm-model <ollama_model>]
+$ yaptap [--prompt <name> | --prompt-file <path>] [--model <whisper_model>] [--llm-model <model_name>] [--llm-provider <provider>]
 $ yaptap --list-prompts
 ```
 
@@ -82,6 +82,8 @@ Available prompts (config/prompts/):
 | User sends SIGINT (Ctrl-C) during recording | Stop recording, delete temp WAV file, print nothing, exit 130 |
 | User sends SIGINT (Ctrl-C) during LLM streaming | Kill `llm.py` subprocess immediately, delete any temp WAV file, exit 130 |
 | LLM generation fails | Print `error: LLM generation failed — <subprocess stderr>` to stderr, exit 1 |
+| `--llm-provider compactifai` and `MULTIVERSE_IAM_API_KEY` not set | Prompt for key on stdin, append `export MULTIVERSE_IAM_API_KEY="..."` to `~/.zshrc`, use for current invocation. See [llm.md](llm.md) § API Key Management. |
+| Unknown `--llm-provider` value | Print `error: unknown llm-provider '<value>' — must be 'ollama' or 'compactifai'` to stderr, exit 1 |
 
 For prompt-specific error cases (`--prompt` not found, `--prompt-file` not found, mutually exclusive flags), see [prompts.md](prompts.md).
 
@@ -104,6 +106,7 @@ For prompt-specific error cases (`--prompt` not found, `--prompt-file` not found
 | `--prompt <name>` | 2 | Select a named prompt from `config/prompts/` |
 | `--prompt-file <path>` | 2 | Use a custom prompt file (TOML format) |
 | `--model <name>` | 2 | Override the Whisper model (default: `base`) |
-| `--llm-model <name>` | 2 | Override the ollama model (default: `llama3`) |
+| `--llm-model <name>` | 2 | Override the LLM model name for the active provider (default: `llama3`) |
+| `--llm-provider <name>` | 2 | Override the LLM provider: `ollama` or `compactifai` (default: `ollama`); overrides `llm_provider` in config |
 | `--list-prompts` | 2 | List available prompts from `config/prompts/` and exit |
 | `--device <index>` | 3 | Select a specific audio input device |
