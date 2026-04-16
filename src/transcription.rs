@@ -64,7 +64,8 @@ pub fn run_transcription(
         .arg(wav_path)
         .args(["--model", model])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .env("PATH", crate::config::brew_augmented_path());
 
     // ── Spawn ─────────────────────────────────────────────────────────────────
     let mut child = cmd

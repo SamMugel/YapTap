@@ -72,7 +72,8 @@ pub fn run_llm_collect(
         .args(["--model", model])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .env("PATH", crate::config::brew_augmented_path());
 
     // ── Spawn ─────────────────────────────────────────────────────────────────
     let mut child = cmd.spawn().context("while spawning python3 llm.py")?;

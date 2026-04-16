@@ -15,7 +15,7 @@
         "On Intel Mac: `brew_augmented_path()` contains `/usr/local/bin` as the first segment.",
         "The existing PATH segments are preserved at the end."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T002",
@@ -27,7 +27,7 @@
         "Launch `dist/YapTap.app` from Finder with ffmpeg installed in /opt/homebrew/bin — pipeline does not fail with 'ffmpeg not found on PATH'.",
         "Remove ffmpeg temporarily: pipeline fails with 'ffmpeg not found on PATH' (check still works)."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T003",
@@ -38,7 +38,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Remove `~/.config/yaptap/.venv/`; launch app from Finder — first-launch setup completes without 'failed to spawn python3' error."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T004",
@@ -49,7 +49,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Launch from Finder; press hotkey, speak, stop — transcription completes without 'No such file or directory: ffmpeg' from whisper."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T005",
@@ -60,7 +60,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Launch from Finder with a prompt selected; trigger the pipeline — LLM step completes successfully."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T006",
@@ -72,7 +72,7 @@
         "Remove venv; launch from Finder — first-launch setup completes and the ffmpeg alert does NOT appear when ffmpeg is installed in /opt/homebrew/bin.",
         "With ffmpeg uninstalled: ffmpeg alert appears after setup."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T007",

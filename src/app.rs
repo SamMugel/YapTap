@@ -205,6 +205,7 @@ fn run_setup_commands() -> Result<(), String> {
     let status = std::process::Command::new("python3")
         .args(["-m", "venv"])
         .arg(&venv_dir)
+        .env("PATH", crate::config::brew_augmented_path())
         .status()
         .map_err(|e| format!("failed to spawn python3: {e}"))?;
     if !status.success() {
@@ -289,8 +290,9 @@ fn run_first_launch_setup() {
     match setup_result {
         Ok(()) => {
             // Check for ffmpeg after setup succeeds.
-            let ffmpeg_ok = std::process::Command::new("which")
-                .arg("ffmpeg")
+            let ffmpeg_ok = std::process::Command::new("ffmpeg")
+                .arg("-version")
+                .env("PATH", crate::config::brew_augmented_path())
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false);
@@ -524,6 +526,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
     // ── Pre-flight checks ─────────────────────────────────────────────────────
     let py_ok = std::process::Command::new("python3")
         .arg("--version")
+        .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -533,6 +536,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 
     let ff_ok = std::process::Command::new("ffmpeg")
         .arg("-version")
+        .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);

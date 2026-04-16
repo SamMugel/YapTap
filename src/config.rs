@@ -71,6 +71,29 @@ pub fn python_interpreter() -> String {
     }
 }
 
+/// Returns an augmented PATH that prepends common Homebrew/tool locations.
+///
+/// macOS app bundles launched from Finder inherit a minimal PATH
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`) that excludes Homebrew directories.
+/// Prepending them ensures subprocesses (ffmpeg, python3, pip) are found.
+pub fn brew_augmented_path() -> String {
+    let extra = [
+        "/opt/homebrew/bin", // Apple Silicon Homebrew
+        "/usr/local/bin",    // Intel Homebrew / common tools
+        "/opt/local/bin",    // MacPorts (less common)
+    ];
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut parts: Vec<&str> = extra
+        .iter()
+        .copied()
+        .filter(|d| std::path::Path::new(d).is_dir())
+        .collect();
+    if !current.is_empty() {
+        parts.push(&current);
+    }
+    parts.join(":")
+}
+
 /// Returns the prompts directory.
 ///
 /// Candidate order:
