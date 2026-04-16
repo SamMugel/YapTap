@@ -81,10 +81,9 @@ Available prompts (config/prompts/):
 | Recording produces empty audio (silence) | Still run transcription; Whisper returns an empty string or short filler; print as-is |
 | User sends SIGINT (Ctrl-C) during recording | Stop recording, delete temp WAV file, print nothing, exit 130 |
 | User sends SIGINT (Ctrl-C) during LLM streaming | Kill `llm.py` subprocess immediately, delete any temp WAV file, exit 130 |
-| `--prompt <name>` and prompt not found | Print `error: prompt '<name>' not found in config/prompts/` to stderr, exit 1 |
-| `--prompt-file <path>` and file not found | Print `error: prompt file not found: <path>` to stderr, exit 1 |
-| `--prompt` and `--prompt-file` both given | Print `error: --prompt and --prompt-file are mutually exclusive` to stderr, exit 1 |
 | LLM generation fails | Print `error: LLM generation failed — <subprocess stderr>` to stderr, exit 1 |
+
+For prompt-specific error cases (`--prompt` not found, `--prompt-file` not found, mutually exclusive flags), see [prompts.md](prompts.md).
 
 ---
 

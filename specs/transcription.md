@@ -14,6 +14,8 @@ Transcription is handled by a thin Python module (`src/core/transcribe.py`) invo
 python3 src/core/transcribe.py <wav_path> [--model <model_name>]
 ```
 
+> **Phase 3 note:** When running inside the `.app` bundle the interpreter is `~/.config/yaptap/.venv/bin/python` and the script path is `<resources>/scripts/transcribe.py`. See [packaging.md](packaging.md) for path resolution and first-launch venv setup.
+
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `<wav_path>` | yes | — | Absolute path to the temp WAV file |
@@ -148,19 +150,21 @@ All external dependencies (`whisper.load_model`, `whisper.model.transcribe`) mus
 | `medium` | 769 M params | slow | high | When accuracy matters |
 | `large` | 1550 M params | very slow | best | Not recommended on CPU |
 
-Phase 1 defaults to `base`. The model is loaded fresh on each invocation (acceptable for phase 1; phase 3 will consider a persistent daemon).
+Phase 1 defaults to `base`. The model is loaded fresh on each invocation.
 
 ---
 
 ## Prerequisites
 
-The user must have Whisper installed in their Python environment:
+**Phase 1 & 2 (CLI / development):** install Whisper manually:
 
 ```
 pip install openai-whisper
 ```
 
-`ffmpeg` must also be available on `PATH` (required by Whisper for audio decoding).
+**Phase 3 (`.app` bundle):** `openai-whisper` is installed automatically into `~/.config/yaptap/.venv/` on first launch. See [packaging.md](packaging.md).
+
+`ffmpeg` must be available on `PATH` in all modes (required by Whisper for audio decoding).
 
 ---
 
