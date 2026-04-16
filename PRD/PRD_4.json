@@ -74,7 +74,7 @@
         "Reproduce the failure: confirm no password prompt or secure input field is active in any focused app at the time the hotkey is pressed.",
         "Document this known limitation in a code comment at the rdev thread spawn site (src/app.rs:438)."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I008",
@@ -108,7 +108,7 @@
         "Test: press and release Option repeatedly while watching the logs; confirm no unbalanced insertions accumulate.",
         "Mitigation: clear the pressed HashSet on any event whose type is not KeyPress or KeyRelease (e.g. on mouse click or focus change event if rdev surfaces one), or implement a maximum staleness timer."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I011",
@@ -130,7 +130,7 @@
         "Trigger a pipeline error alert; press ⌥Space while the alert is open; dismiss the alert and observe whether the app immediately starts recording.",
         "Fix: after each runModal call returns, drain app_event_rx with a while-let discard loop before continuing the main event loop."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I013",
@@ -152,7 +152,7 @@
         "Introduce a syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears (reproducing the bug).",
         "Implement the deferred-alert pattern described above and re-test: the alert should appear after the menu bar icon is visible."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I018",
@@ -188,7 +188,7 @@
         "If the icon never changes, the problem is upstream (hotkey not delivered to the main loop); if it changes but returns to idle quickly, the pipeline is failing.",
         "Add `tracing::info!(\"hotkey received, state = {:?}\", state)` at src/app.rs:552 to make hotkey delivery visible in Console.app without needing a UI change."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I021",

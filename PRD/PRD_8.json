@@ -233,7 +233,7 @@
         "Run `cargo clippy -- -D warnings` — no warnings, exit 0.",
         "Run `cargo test` — all tests pass."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T018",
@@ -250,7 +250,7 @@
         "`dist/YapTap.app/Contents/Resources/YapTap.icns` exists.",
         "Launch `dist/YapTap.app` from Finder — menu bar icon appears, no crash."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T019",
