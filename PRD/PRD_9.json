@@ -84,7 +84,7 @@
         "Run `cargo clippy -- -D warnings` — no warnings, exit 0.",
         "Run `cargo test` — all tests pass."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P9-T008",
@@ -98,7 +98,7 @@
         "Select a prompt; repeat — LLM result appears on clipboard. No 'Ollama not running' alert (assuming Ollama is running).",
         "Quit and relaunch from Finder — no first-launch setup alert (venv already present)."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     }
   ]
 }
