@@ -22,3 +22,4 @@ Implementation tasks are tracked in `PRD/`, one file per phase.
 | [specs/menubar.md](specs/menubar.md) | Menu bar app: lifecycle, icon design, menu structure (phase 3) |
 | [specs/hotkey.md](specs/hotkey.md) | Global hotkey: registration, state machine, clipboard output (phase 3) |
 | [specs/config.md](specs/config.md) | Configuration file: location, format, hotkey syntax (phase 3) |
+| [specs/packaging.md](specs/packaging.md) | App bundle, DMG, first-launch Python setup, Makefile (phase 3) |

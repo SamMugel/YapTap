@@ -43,7 +43,7 @@ Detailed specs: [prompts.md](prompts.md), [llm.md](llm.md)
 
 **Goal:** `yaptap` with no flags starts a persistent macOS menu bar app. A global hotkey (⌥Space by default) starts and stops recording; the result is placed on the clipboard. The user selects an active prompt from the menu bar dropdown.
 
-Detailed specs: [menubar.md](menubar.md), [hotkey.md](hotkey.md), [config.md](config.md)
+Detailed specs: [menubar.md](menubar.md), [hotkey.md](hotkey.md), [config.md](config.md), [packaging.md](packaging.md)
 
 ### Deliverables
 - `yaptap` with no args starts as a menu bar app (`NSApplication` in `LSUIElement` mode; no Dock icon).
@@ -56,6 +56,14 @@ Detailed specs: [menubar.md](menubar.md), [hotkey.md](hotkey.md), [config.md](co
 - Accessibility permission prompt on first launch if not already granted.
 - CLI modes (`--prompt`, `--list-prompts`, `--device`, etc.) continue to work exactly as in Phase 2.
 - In-app hotkey configuration: clicking the Hotkey menu item opens an input dialog; the new hotkey takes effect immediately without restarting the app and is persisted to the config file.
+- `Makefile` with `build`, `icns`, `app`, `dmg`, and `clean` targets.
+- `YapTap.app` bundle: Rust binary, bundled prompt TOML files, menu bar PNG icons, Python scripts, and `Info.plist`.
+- `YapTap.dmg` disk image with drag-to-Applications install UX (built by `make dmg` via `hdiutil`).
+- App icon (`YapTap.icns`) generated from the menu bar idle PNG using `sips` + `iconutil`.
+- First-launch Python setup: venv created at `~/.config/yaptap/.venv/`; `openai-whisper` and `ollama` installed silently; user alerted if `ffmpeg` is missing.
+- Whisper model downloaded automatically on first recording attempt (cached in `~/.cache/whisper/`).
+- Ollama availability check before LLM step; graceful alert if Ollama is not running.
+- Resource path resolution: binary locates scripts, prompts, and icons relative to `Contents/Resources/` when running inside the bundle; falls back to project root during development.
 
 ### Out of scope for Phase 3
 - Cursor injection at current caret position (Phase 4).
