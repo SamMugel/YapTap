@@ -4,7 +4,7 @@
 - `src/main.rs` — Rust CLI entry point (cpal audio capture, WAV encoding, subprocess invocation)
 - `src/core/transcribe.py` — Python Whisper transcription module
 - `src/core/transcribe_test.py` — Python unit tests for transcription
-- `src/core/llm.py` — Python Ollama LLM module (phase 2)
+- `src/core/llm.py` — Python LLM module — supports ollama (local) and CompactifAI (cloud) providers
 - `src/core/llm_test.py` — Python unit tests for LLM (phase 2)
 - `src/__init__.py`, `src/core/__init__.py` — Python package markers
 - `Cargo.toml` — Rust manifest (cpal, hound, tempfile, anyhow, ctrlc, tracing, toml, dirs)
@@ -21,6 +21,7 @@
 - `assets/Info.plist` — macOS bundle metadata (source-controlled)
 - `assets/icons/` — Menu bar icon PNGs (idle/active @1x and @2x)
 - `PRD/PRD_3.json` — Phase 3 task tracking
+- `src/keychain.rs` — macOS Keychain helpers for MULTIVERSE_IAM_API_KEY storage
 
 ## Build Commands
 ```bash
@@ -63,6 +64,7 @@ yaptap                              # phase 1: record → transcript
 yaptap --list-prompts               # show available prompts from config/prompts/
 yaptap --prompt email-reply         # phase 2: record → transcript → LLM
 yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM with custom prompt
+yaptap --llm-provider compactifai --prompt email-reply  # CompactifAI cloud LLM
 ```
 
 ## Prerequisites
@@ -71,6 +73,8 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - `openai-whisper` Python package installed
 - `ollama` Python package installed (phase 2)
 - `ollama` server running with at least one model pulled (phase 2)
+- `openai` Python package installed (phase 13 — CompactifAI support)
+- `MULTIVERSE_IAM_API_KEY` environment variable (when using compactifai provider)
 - macOS (cpal uses CoreAudio)
 - `macOS Accessibility permission` — required for global hotkey (grant in System Settings → Privacy & Security → Accessibility)
 - First launch: creates `~/.config/yaptap/.venv/` with openai-whisper and ollama installed
