@@ -11,17 +11,25 @@ use anyhow::{Context, Result};
 
 /// Resolve the path to `src/core/transcribe.py` relative to the running binary.
 ///
-/// Tries three candidates in order, returning the first whose parent directory
+/// Tries four candidates in order, returning the first whose parent directory
 /// exists (P6-I007):
-///   1. `<binary>/../../../src/core/transcribe.py` — dev build at target/debug/ or
-///      target/release/
-///   2. `<binary>/../src/core/transcribe.py` — bundled install next to the binary
-///   3. `src/core/transcribe.py` — cwd-relative fallback (project root cwd)
+///   1. `<Resources>/scripts/transcribe.py` — bundle layout (Contents/Resources/scripts/)
+///   2. `<binary>/../../src/core/transcribe.py` — dev build at target/debug/ or target/release/
+///   3. `<binary>/src/core/transcribe.py` — legacy
+///   4. `src/core/transcribe.py` — cwd-relative fallback (project root cwd)
 fn transcribe_script_path() -> PathBuf {
+    // Candidate 1: bundle layout (Contents/Resources/scripts/transcribe.py).
+    let resources_candidate = crate::config::resources_dir().join("scripts/transcribe.py");
+    if resources_candidate.parent().map(|p| p.is_dir()).unwrap_or(false) {
+        return resources_candidate;
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let candidates = [
+                // Candidate 2: dev build at target/debug/ or target/release/
                 dir.join("../../src/core/transcribe.py"),
+                // Candidate 3: legacy
                 dir.join("src/core/transcribe.py"),
             ];
             for candidate in &candidates {
@@ -31,6 +39,7 @@ fn transcribe_script_path() -> PathBuf {
             }
         }
     }
+    // Candidate 4: cwd fallback (project root)
     PathBuf::from("src/core/transcribe.py")
 }
 
@@ -50,7 +59,7 @@ pub fn run_transcription(
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
     let script = transcribe_script_path();
-    let mut cmd = Command::new("python3");
+    let mut cmd = Command::new(crate::config::python_interpreter());
     cmd.arg(&script)
         .arg(wav_path)
         .args(["--model", model])

@@ -35,7 +35,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "After `make app`: launch `dist/YapTap.app/Contents/MacOS/yaptap --list-prompts` — prompts listed match those in `Contents/Resources/config/prompts/` (confirms Resources/ resolved correctly)."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T008",
@@ -47,7 +47,7 @@
         "With venv absent: `python_interpreter()` returns `\"python3\"`.",
         "After first-launch setup creates the venv: `python_interpreter()` returns an absolute path ending in `/.venv/bin/python`."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T005",
@@ -59,7 +59,7 @@
         "Dev build from project root: `--list-prompts` still outputs all five prompts (resolves via cwd fallback).",
         "After `make app`: `dist/YapTap.app/Contents/MacOS/yaptap --list-prompts` lists the bundled prompts from `Contents/Resources/config/prompts/`."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T006",
@@ -71,7 +71,7 @@
         "Dev build from project root: trigger a recording cycle — transcription succeeds (resolves via candidate 2 to `src/core/transcribe.py`).",
         "After `make app`: trigger a recording cycle from the bundled binary — pipeline does not fail with 'can't open file' for transcribe.py."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T007",
@@ -83,7 +83,7 @@
         "Dev build from project root with a prompt selected: trigger a recording cycle — LLM step succeeds (resolves via candidate 2).",
         "After `make app` with a prompt selected: trigger a recording cycle from the bundled binary — LLM step does not fail with 'can't open file' for llm.py."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T009",
@@ -94,7 +94,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "With venv present: a recording cycle calls the venv python for transcription, not system python3."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T010",
@@ -105,7 +105,7 @@
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "With venv present and a prompt selected: a recording cycle calls the venv python for the LLM step."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T011",
@@ -117,7 +117,7 @@
         "Remove `~/.config/yaptap/.venv/`. Call `run_setup_commands()` directly (e.g. from a temporary test path): confirm it returns `Ok(())` and `~/.config/yaptap/.venv/bin/python` exists afterwards.",
         "Simulate failure (temporarily rename python3): confirm `Err(String)` is returned with an informative message."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T012",
@@ -132,7 +132,7 @@
         "With ffmpeg absent: 'ffmpeg not found' alert appears after setup completes; app continues to show the menu bar icon.",
         "Simulate failure (temporarily rename python3): 'Setup failed' alert appears; `.venv/` is not created; menu bar icon appears (startup continues)."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T013",
@@ -145,7 +145,7 @@
         "With another instance already running: `ensure_single_instance()` exits 0 before reaching the venv check — no setup alert shown.",
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T015",
@@ -157,7 +157,7 @@
         "With Ollama running (`ollama serve`): `ollama_available()` returns `true`.",
         "With Ollama stopped: `ollama_available()` returns `false` within ~1 second."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T016",
@@ -170,7 +170,7 @@
         "With 'No Prompt' selected and Ollama stopped: transcription completes normally, raw transcript on clipboard — no Ollama alert.",
         "With Ollama running and a prompt selected: pipeline completes normally."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T014",
@@ -182,7 +182,7 @@
         "Run `python3 src/core/transcribe.py <wav_path> 2>&1 | grep -i download` — confirm the line appears.",
         "In app mode: the line is captured by Rust's stderr pipe and never shown to the user — no change in app behaviour."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T002",
@@ -195,7 +195,7 @@
         "Confirm LSUIElement is boolean `1` (not string `true`) in the plutil output.",
         "Run `make app` and confirm `dist/YapTap.app/Contents/Info.plist` is byte-identical to `assets/Info.plist`."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T001",
@@ -209,7 +209,7 @@
         "Run `make dmg` — `dist/YapTap.dmg` is created and the terminal prints 'Built: dist/YapTap.dmg'.",
         "Run `make clean` — `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` are all removed."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T003",
@@ -221,7 +221,7 @@
         "Run `make app` then `git status` — `dist/` and generated icon files do not appear as untracked.",
         "Confirm `assets/Info.plist` and `Makefile` DO appear as untracked (they are source-controlled)."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P8-T017",

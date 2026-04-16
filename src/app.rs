@@ -117,6 +117,18 @@ impl Drop for WavCleanup {
     }
 }
 
+// ── Ollama availability probe ─────────────────────────────────────────────────
+
+fn ollama_available() -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    TcpStream::connect_timeout(
+        &"127.0.0.1:11434".parse().unwrap(),
+        Duration::from_secs(1),
+    )
+    .is_ok()
+}
+
 // ── NSAlert helper ────────────────────────────────────────────────────────────
 
 /// Show a modal NSAlert dialog.  Returns the zero-based index of the button
@@ -181,6 +193,124 @@ fn ensure_single_instance() {
     }
     let our_pid = std::process::id().to_string();
     let _ = std::fs::write(&lock_path, our_pid.as_bytes());
+}
+
+// ── First-launch Python setup ─────────────────────────────────────────────────
+
+fn run_setup_commands() -> Result<(), String> {
+    let venv_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/yaptap/.venv");
+
+    let status = std::process::Command::new("python3")
+        .args(["-m", "venv"])
+        .arg(&venv_dir)
+        .status()
+        .map_err(|e| format!("failed to spawn python3: {e}"))?;
+    if !status.success() {
+        return Err("python3 -m venv exited non-zero".to_string());
+    }
+
+    let pip = venv_dir.join("bin/pip");
+    let status = std::process::Command::new(pip)
+        .args(["install", "--quiet", "openai-whisper", "ollama"])
+        .status()
+        .map_err(|e| format!("failed to spawn pip: {e}"))?;
+    if !status.success() {
+        return Err("pip install exited non-zero".to_string());
+    }
+
+    Ok(())
+}
+
+fn run_first_launch_setup() {
+    // SAFETY: This function is only ever called from the main thread.
+    // NSAlert and NSWindow manipulations require the main thread.
+    let setup_window: id = unsafe {
+        let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+        // LSUIElement = true suppresses automatic front-of-stack promotion.
+        let _: () = msg_send![app, activateIgnoringOtherApps: 1u8];
+
+        let alert: id = msg_send![objc::class!(NSAlert), new];
+        let msg_cstr = CString::new(
+            "Setting up YapTap\u{2026}\n\nInstalling Python dependencies. This takes about 30 seconds.",
+        )
+        .unwrap_or_default();
+        let msg_ns: id = msg_send![objc::class!(NSString), alloc];
+        let msg_ns: id = msg_send![msg_ns, initWithUTF8String: msg_cstr.as_ptr()];
+        let (): () = msg_send![alert, setMessageText: msg_ns];
+
+        // Show the alert window non-modally (no buttons — auto-dismissed when setup completes).
+        let window: id = msg_send![alert, window];
+        let (): () = msg_send![window, orderFront: cocoa::base::nil];
+        window
+    };
+
+    // Run venv creation and pip install in a background thread.
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::spawn(move || {
+        let _ = tx.send(run_setup_commands());
+    });
+
+    // Pump the NSApp event loop until setup completes.
+    let setup_result: Result<(), String> = unsafe {
+        let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+        loop {
+            let date: id = msg_send![
+                objc::class!(NSDate),
+                dateWithTimeIntervalSinceNow: 0.016_f64
+            ];
+            let mode: id = msg_send![
+                objc::class!(NSString),
+                stringWithUTF8String: c"kCFRunLoopDefaultMode".as_ptr()
+            ];
+            let event: id = msg_send![
+                app,
+                nextEventMatchingMask: u64::MAX
+                untilDate: date
+                inMode: mode
+                dequeue: 1u8
+            ];
+            if event != cocoa::base::nil {
+                let _: () = msg_send![app, sendEvent: event];
+            }
+            if let Ok(result) = rx.try_recv() {
+                break result;
+            }
+        }
+    };
+
+    // Dismiss the setup alert.
+    unsafe {
+        let _: () = msg_send![setup_window, orderOut: cocoa::base::nil];
+    }
+
+    // Handle setup outcome.
+    match setup_result {
+        Ok(()) => {
+            // Check for ffmpeg after setup succeeds.
+            let ffmpeg_ok = std::process::Command::new("which")
+                .arg("ffmpeg")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if !ffmpeg_ok {
+                show_alert(
+                    "ffmpeg not found",
+                    "YapTap requires ffmpeg for audio processing.\nInstall it with: brew install ffmpeg",
+                    &["OK"],
+                );
+            }
+        }
+        Err(msg) => {
+            tracing::warn!(error = %msg, "first-launch setup failed");
+            show_alert(
+                "Setup failed",
+                "YapTap could not install Python dependencies. Ensure python3 is installed and try launching again.",
+                &["OK"],
+            );
+        }
+    }
 }
 
 // ── Graceful exit (P3-T067) ───────────────────────────────────────────────────
@@ -435,6 +565,13 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 
     // ── LLM (if a prompt is selected) ────────────────────────────────────────
     let output = if !config.selected_prompt.is_empty() {
+        // Probe Ollama availability before attempting the LLM step.
+        if !ollama_available() {
+            anyhow::bail!(
+                "Ollama not running. Start Ollama and try again.\n\
+                 Run `ollama serve` in a terminal, or open the Ollama app."
+            );
+        }
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
             crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &shared.child)?
@@ -480,6 +617,18 @@ pub fn run_app() {
 
     // ── Single-instance guard (may exit 0 if another copy is running) ─────────
     ensure_single_instance();
+
+    // ── First-launch Python venv setup ────────────────────────────────────────
+    // Must be after ensure_single_instance() so the alert is never shown to a
+    // duplicate instance that is about to exit 0.
+    {
+        let venv_python = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".config/yaptap/.venv/bin/python");
+        if !venv_python.is_file() {
+            run_first_launch_setup();
+        }
+    }
 
     // ── Shared state ──────────────────────────────────────────────────────────
     let shared = Arc::new(SharedState::new());

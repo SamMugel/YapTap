@@ -14,17 +14,26 @@ use anyhow::{Context, Result};
 
 /// Resolve the path to `src/core/llm.py` relative to the running binary.
 ///
-/// Tries three candidates in order, returning the first whose parent directory
+/// Tries four candidates in order, returning the first whose parent directory
 /// exists (P6-I007):
-///   1. `<binary>/../../../src/core/llm.py` — dev build at target/debug/ or
+///   1. `Contents/Resources/scripts/llm.py` — bundle layout
+///   2. `<binary>/../../src/core/llm.py` — dev build at target/debug/ or
 ///      target/release/
-///   2. `<binary>/../src/core/llm.py` — bundled install next to the binary
-///   3. `src/core/llm.py` — cwd-relative fallback (project root cwd)
+///   3. `<binary>/src/core/llm.py` — legacy
+///   4. `src/core/llm.py` — cwd-relative fallback (project root cwd)
 fn llm_script_path() -> PathBuf {
+    // Candidate 1: bundle layout (Contents/Resources/scripts/llm.py).
+    let resources_candidate = crate::config::resources_dir().join("scripts/llm.py");
+    if resources_candidate.parent().map(|p| p.is_dir()).unwrap_or(false) {
+        return resources_candidate;
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let candidates = [
+                // Candidate 2: dev build at target/debug/ or target/release/
                 dir.join("../../src/core/llm.py"),
+                // Candidate 3: legacy
                 dir.join("src/core/llm.py"),
             ];
             for candidate in &candidates {
@@ -34,6 +43,7 @@ fn llm_script_path() -> PathBuf {
             }
         }
     }
+    // Candidate 4: cwd fallback (project root)
     PathBuf::from("src/core/llm.py")
 }
 
@@ -55,7 +65,7 @@ pub fn run_llm_collect(
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
     let script = llm_script_path();
-    let mut cmd = Command::new("python3");
+    let mut cmd = Command::new(crate::config::python_interpreter());
     cmd.arg(&script)
         .arg("--prompt-file")
         .arg(prompt_path)

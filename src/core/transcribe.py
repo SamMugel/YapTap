@@ -32,6 +32,10 @@ def transcribe(wav_path: str, model_name: str = "base") -> str:
     if not Path(wav_path).exists():
         raise ValueError(f"WAV file not found: {wav_path}")
 
+    print(
+        f"Downloading Whisper {model_name} model — first use only (may take 1–3 minutes)…",
+        file=sys.stderr,
+    )
     try:
         model = whisper.load_model(model_name)
     except Exception as e:

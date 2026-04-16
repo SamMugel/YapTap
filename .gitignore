@@ -1,3 +1,6 @@
 /target/
 **/__pycache__/
 *.pyc
+dist/
+assets/icons/AppIcon.iconset/
+assets/icons/YapTap.icns
