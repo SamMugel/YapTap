@@ -739,6 +739,11 @@ pub fn run_app() {
                 let hotkey_str = config.hotkey.clone();
                 thread::spawn(move || {
                     tracing::debug!("rdev thread spawned");
+                    // P4-I007: CGEventTap silently receives no events while any
+                    // secure text field (password prompt, sudo, 1Password unlock)
+                    // is focused.  This is a macOS security feature that cannot
+                    // be worked around — the user must dismiss the secure field
+                    // first, then press the hotkey.
                     // tx_inner is moved into the rdev callback; tx is kept for
                     // the error path after rdev::listen() returns.
                     let tx_inner = Arc::clone(&tx);
@@ -781,6 +786,14 @@ pub fn run_app() {
                                 // !main_key_down.
                                 if modifiers_held && key == parsed.key && !main_key_down {
                                     main_key_down = true;
+                                    // P4-I010: clear accumulated modifier keys after
+                                    // the hotkey fires so a missed modifier KeyRelease
+                                    // cannot leave a sticky modifier in `pressed` that
+                                    // would falsely satisfy `modifiers_held` on the
+                                    // next press.  Retaining only the main key means
+                                    // its KeyRelease will empty the set and reset
+                                    // main_key_down as expected.
+                                    pressed.retain(|k| *k == key);
                                     let _ = tx_inner.send(AppEvent::HotkeyPressed);
                                 }
                             }
@@ -1013,6 +1026,10 @@ pub fn run_app() {
                                         format!("Failed to start recording: {e}")
                                     };
                                     show_alert("Recording Error", &msg, &["OK"]);
+                                    // P4-I012: discard AppEvents queued during the modal
+                                    // so a hotkey press during the alert does not
+                                    // immediately start a new recording on dismiss.
+                                    while app_event_rx.try_recv().is_ok() {}
                                 }
                             }
                         }
@@ -1063,17 +1080,23 @@ pub fn run_app() {
                                         &format!("Failed to copy to clipboard: {e}"),
                                         &["OK"],
                                     );
+                                    // P4-I012: discard queued AppEvents during modal.
+                                    while app_event_rx.try_recv().is_ok() {}
                                 }
                             }
                         }
                         Err(msg) => {
                             show_alert("Pipeline Error", &msg, &["OK"]);
+                            // P4-I012: discard queued AppEvents during modal.
+                            while app_event_rx.try_recv().is_ok() {}
                         }
                     }
                 }
 
                 AppEvent::HotkeyError(msg) => {
                     show_alert("Hotkey Error", &msg, &["OK"]);
+                    // P4-I012: discard queued AppEvents during modal.
+                    while app_event_rx.try_recv().is_ok() {}
                 }
             }
         }
