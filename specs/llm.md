@@ -16,6 +16,8 @@ python3 src/core/llm.py --prompt-file <path> [--model <model_name>]
 
 The transcript is passed via **stdin** (UTF-8 text, newline-terminated).
 
+> **Phase 3 note:** When running inside the `.app` bundle the interpreter is `~/.config/yaptap/.venv/bin/python` and the script path is `<resources>/scripts/llm.py`. See [packaging.md](packaging.md) for path resolution and first-launch venv setup.
+
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `--prompt-file <path>` | yes | — | Absolute path to a prompt TOML file |
@@ -46,9 +48,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 
-import tomllib
 import ollama
 
 logger = logging.getLogger(__name__)
@@ -66,7 +69,7 @@ def stream_response(
     transcript: str,
     prompt_path: str,
     model_name: str = "llama3",
-):
+) -> Iterator[str]:
     """Load prompt, combine with transcript, stream ollama response.
 
     Args:
@@ -81,12 +84,60 @@ def stream_response(
         ValueError: If prompt_path is empty, file does not exist, or TOML is invalid.
         RuntimeError: If ollama fails to generate a response.
     """
-    ...
+    if not prompt_path:
+        raise ValueError("prompt_path must not be empty")
+    path = Path(prompt_path)
+    if not path.exists():
+        raise ValueError(f"Prompt file not found: {prompt_path!r}")
+
+    try:
+        prompt = tomllib.loads(path.read_text())
+    except Exception as err:
+        raise ValueError(f"Prompt file is not valid TOML: {prompt_path!r}") from err
+
+    if "system" not in prompt:
+        raise ValueError(f"Prompt file missing 'system' field: {prompt_path!r}")
+
+    messages = [
+        {"role": "system", "content": prompt["system"]},
+        {"role": "user", "content": transcript},
+    ]
+
+    logger.debug("Calling ollama", extra={"model": model_name})
+    try:
+        response = ollama.chat(model=model_name, messages=messages, stream=True)
+        for chunk in response:
+            token = chunk["message"]["content"]
+            yield token
+    except Exception as err:
+        raise RuntimeError(f"Ollama generation failed with model {model_name!r}") from err
 
 
 def main() -> None:
     """CLI entry point: read transcript from stdin, stream LLM response to stdout."""
-    ...
+    logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+
+    parser = argparse.ArgumentParser(
+        description="Stream an LLM response via ollama and print to stdout."
+    )
+    parser.add_argument(
+        "--prompt-file", required=True, help="Absolute path to a prompt TOML file"
+    )
+    parser.add_argument(
+        "--model", default="llama3", help="Ollama model name (default: llama3)"
+    )
+    args = parser.parse_args()
+
+    transcript = sys.stdin.read()
+
+    try:
+        for token in stream_response(transcript, args.prompt_file, args.model):
+            print(token, end="", flush=True)
+    except (ValueError, RuntimeError) as err:
+        print(f"error: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    print()  # final newline
 
 
 if __name__ == "__main__":
@@ -161,7 +212,13 @@ Phase 2 defaults to `llama3`. The model must be pulled via `ollama pull <model>`
 
 ## Prerequisites
 
-The user must have ollama installed and running:
+**Phase 2 (CLI / development):** install the `ollama` Python package manually:
+
+```
+pip install ollama
+```
+
+Ollama itself must also be installed and running:
 
 ```
 brew install ollama
@@ -169,11 +226,7 @@ ollama serve        # start the local server
 ollama pull llama3  # download the default model
 ```
 
-The `ollama` Python package must be installed:
-
-```
-pip install ollama
-```
+**Phase 3 (`.app` bundle):** `ollama` (Python package) is installed automatically into `~/.config/yaptap/.venv/` on first launch. The Ollama application/server must still be running separately — the app checks reachability before invoking `llm.py` (see [packaging.md](packaging.md)).
 
 ---
 

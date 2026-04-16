@@ -25,7 +25,7 @@ The CLI modes from Phases 1 and 2 still work when any flag is passed (see [cli.m
 ## Lifecycle
 
 1. Process starts; reads `~/.config/yaptap/config.toml` (creates with defaults if absent).
-2. Loads available prompts from `config/prompts/` relative to the binary.
+2. Loads available prompts from `<resources_dir>/config/prompts/` (see [packaging.md](packaging.md) for path resolution).
 3. Creates an `NSApplication` in `LSUIElement` mode (no Dock icon, no app menu bar).
 4. Adds the menu bar item with the idle icon.
 5. Registers the configured global hotkey via `CGEventTap`.
@@ -96,14 +96,14 @@ Clicking the menu bar icon opens a dropdown:
 Clicking the Hotkey menu item opens an input dialog pre-filled with the current hotkey string (e.g. `option+space`). The user edits the string and clicks OK. The app validates the input with the same parser used at launch (see [config.md](config.md) for the key-name syntax). On valid input:
 
 1. The rdev listener updates its target combo immediately — no restart required.
-2. The new value is written atomically to `~/.config/yaptap/config.toml` (write to `.tmp`, then rename).
+2. The new value is written atomically to `~/.config/yaptap/config.toml` (see [config.md](config.md)).
 3. The menu label updates to reflect the new hotkey (e.g. `Hotkey: ⌘⇧Y`).
 
 On invalid input: an error alert is shown and the old hotkey remains active. Clicking Cancel makes no change.
 
 ### Prompt Selection Persistence
 
-Selecting a prompt writes `selected_prompt = "<stem>"` to the config file immediately using an atomic write (write to `.tmp`, then rename). The checkmark updates in the menu. If a recording is already in progress when the selection changes, the new prompt takes effect for the current recording.
+Selecting a prompt writes `selected_prompt = "<stem>"` to the config file immediately using an atomic write (see [config.md](config.md)). The checkmark updates in the menu. If a recording is already in progress when the selection changes, the new prompt takes effect for the current recording.
 
 ---
 
@@ -115,5 +115,6 @@ Selecting a prompt writes `selected_prompt = "<stem>"` to the config file immedi
 | Accessibility permission denied | Alert on launch; hotkey not registered until permission is granted and app is restarted |
 | Audio device lost during recording | Transition to Idle; show alert with error message |
 | Transcription failure | Transition to Idle; show alert with error message |
+| Ollama not running (TCP probe fails) | Alert: *"Ollama is not running. Start Ollama and try again."*; transition to Idle; `llm.py` is not spawned |
 | LLM failure | Transition to Idle; show alert with error message |
 | Config file write failure | Log warning to stderr; continue with in-memory selection only |

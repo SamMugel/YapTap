@@ -14,7 +14,8 @@ Created automatically on first launch with default values. The directory `~/.con
 
 ```toml
 # YapTap configuration
-# Edit this file and restart YapTap to apply changes to hotkey or model fields.
+# hotkey: change via in-app dialog (takes effect immediately), or edit here and restart
+# whisper_model, llm_model: edit here and restart to apply
 
 hotkey = "option+space"    # global hotkey to start/stop recording
 selected_prompt = ""       # stem of selected prompt file; empty = No Prompt

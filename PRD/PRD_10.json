@@ -1,0 +1,72 @@
+{
+  "phase": 10,
+  "phase_name": "Fix: numpy 2.x ABI incompatibility breaks openai-whisper transcription",
+  "goal": "openai-whisper's C extensions (via numba/torch) were compiled against the NumPy 1.x ABI. NumPy 2.0 introduced breaking changes to its C ABI; loading those extensions under numpy 2.x raises an error matching 'A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x'. The fix has two parts: (1) pin 'numpy<2' in the first-launch pip install so new venvs always get a compatible numpy; (2) auto-detect a broken existing venv at startup (numpy>=2 installed) and delete it so first-launch setup re-runs with the corrected pin.",
+  "root_cause": "run_setup_commands() installs 'openai-whisper ollama' without a numpy version constraint. pip resolves numpy to the latest release (2.0.2 at time of writing). openai-whisper's transitive dependency numba ships pre-built wheels compiled against the numpy 1.x C API, which is binary-incompatible with numpy 2.x.",
+  "architecture_note": "The venv python is the Xcode universal binary (/usr/bin/python3, Python 3.9.6). Under x86_64 Rosetta (the yaptap process), numpy 2.0.2 imports but torch logs '_ARRAY_API not found' — its numpy bridge is broken. With numpy<2 (1.26.4), whisper imports clean (exit 0, no warnings). Architecture mismatch (.so x86_64 vs ARM64 native terminal) is only visible when testing from the ARM64 shell, not at app runtime.",
+  "tasks": [
+    {
+      "id": "P10-T001",
+      "section": "pip-pin",
+      "title": "Pin `\"numpy<2\"` before `openai-whisper` in `run_setup_commands()` (`src/app.rs`)",
+      "description": "In `run_setup_commands()`, change the pip install args to add `\"numpy<2\"` as the first package so pip resolves a 1.x numpy before pulling in openai-whisper and its transitive deps.\n\nCurrent:\n```rust\n.args([\"install\", \"--quiet\", \"openai-whisper\", \"ollama\"])\n```\n\nReplace with:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\"])\n```\n\nThis is a one-arg change. No other logic is altered.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Remove `~/.config/yaptap/.venv/`.",
+        "Call `run_setup_commands()` (e.g. via a fresh launch without venv): confirm the installed numpy version is 1.x via `~/.config/yaptap/.venv/bin/pip show numpy | grep Version`."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P10-T002",
+      "section": "venv-repair",
+      "title": "Add `fn venv_numpy_ok() -> bool` to `src/app.rs`",
+      "description": "Add a fast health-check function that returns `false` when the venv exists but has numpy>=2 installed. Used in P10-T003 to auto-repair the existing broken venv without user action.\n\n```rust\n/// Returns false when the venv exists but its numpy is >= 2 (ABI-incompatible with whisper).\n/// Returns true when the venv is absent (not our concern) or numpy is 1.x.\nfn venv_numpy_ok() -> bool {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_default()\n        .join(\".config/yaptap/.venv/bin/python\");\n    if !venv_python.is_file() {\n        return true;\n    }\n    std::process::Command::new(&venv_python)\n        .args([\"-c\",\n            \"import numpy; v=numpy.__version__.split('.');\\\n             assert int(v[0]) < 2, 'numpy>=2'\"])\n        .env(\"PATH\", crate::config::brew_augmented_path())\n        .output()\n        .map(|o| o.status.success())\n        .unwrap_or(true)\n}\n```\n\nPlace immediately before `run_first_launch_setup()` in `src/app.rs`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With numpy 2.x venv present: `venv_numpy_ok()` returns `false`.",
+        "With numpy 1.x venv present: `venv_numpy_ok()` returns `true`.",
+        "With no venv: `venv_numpy_ok()` returns `true`."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P10-T003",
+      "section": "venv-repair",
+      "title": "Delete broken venv and trigger re-setup when `venv_numpy_ok()` returns false (`src/app.rs`)",
+      "description": "In `run_app()`, immediately before the existing venv-presence guard, add a repair block that removes the venv when `venv_numpy_ok()` returns false. The existing `if !venv_python.is_file()` guard then triggers first-launch setup (now with numpy<2 pinned).\n\nCurrent block in `run_app()` (inserted in P8-T013):\n```rust\n    // ── First-launch Python venv setup ────────────────────────────────────────\n    {\n        let venv_python = dirs::home_dir()\n            .unwrap_or_default()\n            .join(\".config/yaptap/.venv/bin/python\");\n        if !venv_python.is_file() {\n            run_first_launch_setup();\n        }\n    }\n```\n\nReplace with:\n```rust\n    // ── First-launch Python venv setup (with numpy-compat repair) ────────────\n    {\n        // Auto-repair: if the venv exists but has numpy>=2, remove it so\n        // first-launch setup re-runs and installs the pinned numpy<2.\n        if !venv_numpy_ok() {\n            tracing::warn!(\"numpy>=2 detected in venv — removing for re-setup\");\n            let venv_dir = dirs::home_dir()\n                .unwrap_or_default()\n                .join(\".config/yaptap/.venv\");\n            let _ = std::fs::remove_dir_all(&venv_dir);\n        }\n        let venv_python = dirs::home_dir()\n            .unwrap_or_default()\n            .join(\".config/yaptap/.venv/bin/python\");\n        if !venv_python.is_file() {\n            run_first_launch_setup();\n        }\n    }\n```",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With numpy 2.x venv present: launch the app — venv is deleted and 'Setting up YapTap' alert appears; after setup completes, `pip show numpy` reports version 1.x.",
+        "With numpy 1.x venv present: launch the app — setup alert does NOT appear; startup proceeds directly to tray icon.",
+        "With no venv: setup alert appears as before."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P10-T004",
+      "section": "verification",
+      "title": "Verify `cargo build`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
+      "description": "After P10-T001 through P10-T003, confirm no regressions.",
+      "checks": [
+        "Run `cargo build` — exit 0.",
+        "Run `cargo clippy -- -D warnings` — no warnings.",
+        "Run `cargo test` — all 10 tests pass."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P10-T005",
+      "section": "verification",
+      "title": "End-to-end: delete venv, relaunch dev binary, confirm transcription succeeds",
+      "description": "Verify the full repair and transcription pipeline.\n\n1. `rm -rf ~/.config/yaptap/.venv`\n2. Launch `./target/debug/yaptap` — 'Setting up YapTap…' alert appears.\n3. After alert dismisses: `~/.config/yaptap/.venv/bin/pip show numpy | grep Version` → should show `1.x`.\n4. Press hotkey, speak for 3 seconds, release — transcript appears on clipboard, no 'transcription failed' alert.",
+      "checks": [
+        "Setup alert appears and auto-dismisses.",
+        "`pip show numpy` in the venv shows Version: 1.x",
+        "Transcription succeeds — clipboard receives non-empty text.",
+        "No 'transcription failed — A module compiled using NumPy 1.x' alert."
+      ],
+      "implementation_status": "done"
+    }
+  ]
+}

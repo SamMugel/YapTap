@@ -1,0 +1,298 @@
+{
+  "phase": 8,
+  "phase_name": "Packaging — Makefile, App Bundle, DMG, First-Launch Setup, and Ollama Check",
+  "goal": "Produce a distributable `YapTap.app` bundle and `YapTap.dmg` disk image via a `Makefile`. Add the remaining Phase 3 runtime behaviours: bundle-aware resource path resolution, first-launch Python venv setup (with a progress alert), venv-based Python interpreter resolution, Whisper model download warning, and an Ollama availability probe before the LLM step.",
+  "scope": {
+    "in_scope": [
+      "Makefile with build / icns / app / dmg / clean targets",
+      "assets/Info.plist source-controlled bundle metadata",
+      ".gitignore additions for dist/, AppIcon.iconset/, YapTap.icns",
+      "resources_dir() in config.rs: bundle-aware Resources/ resolution",
+      "prompts_dir() updated to check <resources>/config/prompts/ first",
+      "transcribe_script_path() and llm_script_path() updated to check <resources>/scripts/ first",
+      "python_interpreter() in config.rs: returns venv python if present, else 'python3'",
+      "run_transcription() and run_llm_collect() updated to use python_interpreter()",
+      "run_setup_commands(): subprocess logic for venv creation and pip install",
+      "run_first_launch_setup(): UI wrapper with NSAlert, event-loop pump, result handling",
+      "Whisper model download warning written to stderr in transcribe.py before load_model()",
+      "ollama_available(): TCP probe to 127.0.0.1:11434 before LLM step",
+      "Verification tasks for bundle structure, DMG, first-launch setup, and Ollama check"
+    ],
+    "out_of_scope": [
+      "Cursor injection at caret position (Phase 4)",
+      "Code signing or notarisation",
+      "Auto-update / Sparkle",
+      "System notifications"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "P8-T004",
+      "section": "resource-path-resolution",
+      "title": "Add `pub fn resources_dir() -> PathBuf` to `src/config.rs`",
+      "description": "Add a public helper to `src/config.rs` that resolves the bundle's Resources directory at runtime, per `specs/packaging.md`:\n\n```rust\npub fn resources_dir() -> std::path::PathBuf {\n    if let Ok(exe) = std::env::current_exe() {\n        if let Some(macos_dir) = exe.parent() {\n            let candidate = macos_dir.join(\"../Resources\");\n            if candidate.exists() {\n                return candidate.canonicalize().unwrap_or(candidate);\n            }\n        }\n    }\n    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(\".\"))\n}\n```\n\n- **Bundle** (`Contents/MacOS/yaptap`): `../Resources` = `Contents/Resources/` — exists → returned.\n- **Dev build** (`target/debug/yaptap` from project root): `../Resources` does not exist → `current_dir()` returned.\n\nThis is the single source of truth for the Resources path used by all path helpers in this file and in `transcription.rs`/`llm.rs`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "After `make app`: launch `dist/YapTap.app/Contents/MacOS/yaptap --list-prompts` — prompts listed match those in `Contents/Resources/config/prompts/` (confirms Resources/ resolved correctly)."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T008",
+      "section": "python-interpreter",
+      "title": "Add `pub fn python_interpreter() -> String` to `src/config.rs`",
+      "description": "Add a helper that returns the Python interpreter path for all subprocess calls, per `specs/packaging.md` 'Python Interpreter for Subprocesses':\n\n```rust\npub fn python_interpreter() -> String {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_else(|| std::path::PathBuf::from(\".\"))\n        .join(\".config/yaptap/.venv/bin/python\");\n    if venv_python.is_file() {\n        venv_python.to_string_lossy().into_owned()\n    } else {\n        \"python3\".to_string()\n    }\n}\n```\n\nReturns the absolute venv interpreter path if `~/.config/yaptap/.venv/bin/python` exists as a file; otherwise falls back to `\"python3\"` (PATH lookup). Called by `run_transcription()` and `run_llm_collect()`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With venv absent: `python_interpreter()` returns `\"python3\"`.",
+        "After first-launch setup creates the venv: `python_interpreter()` returns an absolute path ending in `/.venv/bin/python`."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T005",
+      "section": "resource-path-resolution",
+      "title": "Update `prompts_dir()` in `src/config.rs` to check `resources_dir().join(\"config/prompts\")` first",
+      "description": "Prepend `resources_dir().join(\"config/prompts\")` as the first candidate in `prompts_dir()`, before the existing binary-dir and cwd candidates. Return it immediately if the directory exists.\n\nCandidate order after change:\n1. `resources_dir().join(\"config/prompts\")` — bundle layout (`Contents/Resources/config/prompts/`)\n2. `<binary_dir>/config/prompts` — existing dev candidate\n3. `<cwd>/config/prompts` — existing cwd fallback",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Dev build from project root: `--list-prompts` still outputs all five prompts (resolves via cwd fallback).",
+        "After `make app`: `dist/YapTap.app/Contents/MacOS/yaptap --list-prompts` lists the bundled prompts from `Contents/Resources/config/prompts/`."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T006",
+      "section": "resource-path-resolution",
+      "title": "Update `transcribe_script_path()` in `src/transcription.rs` to check `resources_dir().join(\"scripts/transcribe.py\")` first",
+      "description": "Prepend `crate::config::resources_dir().join(\"scripts/transcribe.py\")` as the first candidate in `transcribe_script_path()`, using the existing `parent().is_dir()` guard.\n\nCandidate order after change:\n1. `resources_dir().join(\"scripts/transcribe.py\")` — bundle layout\n2. `<binary_dir>/../../src/core/transcribe.py` — dev build at `target/debug/` or `target/release/`\n3. `<binary_dir>/src/core/transcribe.py` — legacy\n4. `src/core/transcribe.py` — cwd fallback",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Dev build from project root: trigger a recording cycle — transcription succeeds (resolves via candidate 2 to `src/core/transcribe.py`).",
+        "After `make app`: trigger a recording cycle from the bundled binary — pipeline does not fail with 'can't open file' for transcribe.py."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T007",
+      "section": "resource-path-resolution",
+      "title": "Update `llm_script_path()` in `src/llm.rs` to check `resources_dir().join(\"scripts/llm.py\")` first",
+      "description": "Mirror P8-T006 in `src/llm.rs`: prepend `crate::config::resources_dir().join(\"scripts/llm.py\")` as the first candidate in `llm_script_path()`, using the same `parent().is_dir()` guard.\n\nCandidate order after change:\n1. `resources_dir().join(\"scripts/llm.py\")` — bundle layout\n2. `<binary_dir>/../../src/core/llm.py` — dev build\n3. `<binary_dir>/src/core/llm.py` — legacy\n4. `src/core/llm.py` — cwd fallback",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Dev build from project root with a prompt selected: trigger a recording cycle — LLM step succeeds (resolves via candidate 2).",
+        "After `make app` with a prompt selected: trigger a recording cycle from the bundled binary — LLM step does not fail with 'can't open file' for llm.py."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T009",
+      "section": "python-interpreter",
+      "title": "Update `run_transcription()` in `src/transcription.rs` to use `crate::config::python_interpreter()`",
+      "description": "Replace `Command::new(\"python3\")` in `run_transcription()` with `Command::new(crate::config::python_interpreter())`. One-line change; all other logic unchanged.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With venv present: a recording cycle calls the venv python for transcription, not system python3."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T010",
+      "section": "python-interpreter",
+      "title": "Update `run_llm_collect()` in `src/llm.rs` to use `crate::config::python_interpreter()`",
+      "description": "Replace `Command::new(\"python3\")` in `run_llm_collect()` with `Command::new(crate::config::python_interpreter())`. One-line change; all other logic unchanged.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With venv present and a prompt selected: a recording cycle calls the venv python for the LLM step."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T011",
+      "section": "first-launch-setup",
+      "title": "Add `fn run_setup_commands() -> Result<(), String>` to `src/app.rs`",
+      "description": "Add a pure subprocess function (no UI, no threading) that runs the venv creation and pip install commands sequentially. This will be called from a background thread by `run_first_launch_setup()` (P8-T012):\n\n```rust\nfn run_setup_commands() -> Result<(), String> {\n    let venv_dir = dirs::home_dir()\n        .unwrap_or_default()\n        .join(\".config/yaptap/.venv\");\n\n    let status = std::process::Command::new(\"python3\")\n        .args([\"-m\", \"venv\"])\n        .arg(&venv_dir)\n        .status()\n        .map_err(|e| format!(\"failed to spawn python3: {e}\"))?;\n    if !status.success() {\n        return Err(\"python3 -m venv exited non-zero\".to_string());\n    }\n\n    let pip = venv_dir.join(\"bin/pip\");\n    let status = std::process::Command::new(pip)\n        .args([\"install\", \"--quiet\", \"openai-whisper\", \"ollama\"])\n        .status()\n        .map_err(|e| format!(\"failed to spawn pip: {e}\"))?;\n    if !status.success() {\n        return Err(\"pip install exited non-zero\".to_string());\n    }\n\n    Ok(())\n}\n```\n\nNote: always uses system `python3` for venv creation (the venv does not yet exist at this point). The pip command uses the venv's own `bin/pip` to install into the venv.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Remove `~/.config/yaptap/.venv/`. Call `run_setup_commands()` directly (e.g. from a temporary test path): confirm it returns `Ok(())` and `~/.config/yaptap/.venv/bin/python` exists afterwards.",
+        "Simulate failure (temporarily rename python3): confirm `Err(String)` is returned with an informative message."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T012",
+      "section": "first-launch-setup",
+      "title": "Add `fn run_first_launch_setup()` to `src/app.rs` — UI wrapper for venv setup",
+      "description": "Add a function that implements the full first-launch setup UX per `specs/packaging.md`:\n\n1. Call `NSApp activateIgnoringOtherApps: YES` (unsafe objc) — required because `LSUIElement = true` suppresses automatic front-of-stack promotion.\n\n2. Create an `NSAlert` with message `\"Setting up YapTap…\\n\\nInstalling Python dependencies. This takes about 30 seconds.\"` — no user buttons. Display it **non-modally**: call `[alert window]` to get the backing `NSWindow`, then `[window orderFront: nil]`. Do NOT call `runModal` (that would block waiting for a button click).\n\n3. Spawn a background thread that calls `run_setup_commands()` and sends the `Result<(), String>` over an `mpsc::channel`.\n\n4. Pump the NSApp event loop until the channel delivers a result:\n   ```rust\n   loop {\n       // SAFETY: called on main thread; documented NSApplication event pump.\n       unsafe {\n           let evt: id = msg_send![app, nextEventMatchingMask: u64::MAX\n               untilDate: until_date  // e.g. NSDate dateWithTimeIntervalSinceNow:0.016\n               inMode: ns_default_run_loop_mode\n               dequeue: YES];\n           if evt != nil {\n               let () = msg_send![app, sendEvent: evt];\n           }\n       }\n       if let Ok(result) = rx.try_recv() { break result; }\n   }\n   ```\n\n5. Dismiss the alert: call `[window orderOut: nil]` on the main thread.\n\n6. On `Ok(())`: check ffmpeg via `Command::new(\"which\").arg(\"ffmpeg\")`; if exit non-zero, call `show_alert(\"ffmpeg not found\", \"YapTap requires ffmpeg for audio processing.\\nInstall it with: brew install ffmpeg\", &[\"OK\"])`.\n\n7. On `Err(msg)`: call `show_alert(\"Setup failed\", \"YapTap could not install Python dependencies. Ensure python3 is installed and try launching again.\", &[\"OK\"])`. Do **not** write any sentinel file — absence of `.venv/bin/python` triggers a retry on next launch. Continue startup regardless.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Remove `~/.config/yaptap/.venv/`. Run `./target/debug/yaptap` — the 'Setting up YapTap…' alert window appears within 1 second with no buttons.",
+        "After ~30 seconds the alert disappears automatically and the menu bar icon appears.",
+        "Confirm `~/.config/yaptap/.venv/bin/python` and `.venv/bin/pip` exist.",
+        "With ffmpeg absent: 'ffmpeg not found' alert appears after setup completes; app continues to show the menu bar icon.",
+        "Simulate failure (temporarily rename python3): 'Setup failed' alert appears; `.venv/` is not created; menu bar icon appears (startup continues)."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T013",
+      "section": "first-launch-setup",
+      "title": "Call `run_first_launch_setup()` from `run_app()` when the venv is absent",
+      "description": "In `run_app()` in `src/app.rs`, after `ensure_single_instance()` (so the setup alert is never shown to a duplicate instance that is about to exit 0) and after config-warning alerts, add:\n\n```rust\n// First-launch Python setup — must be after ensure_single_instance.\nlet venv_python = dirs::home_dir()\n    .unwrap_or_default()\n    .join(\".config/yaptap/.venv/bin/python\");\nif !venv_python.is_file() {\n    run_first_launch_setup();\n}\n```\n\nPlacement in `run_app()` (in order):\n1. `finishLaunching` ✓\n2. `AppConfig::load()` + config-warning alerts ✓\n3. `ensure_single_instance()` ✓\n4. **venv check → `run_first_launch_setup()`** ← insert here\n5. SharedState, signal handlers, app_event channel, hotkey thread, tray icon, event loop",
+      "checks": [
+        "With venv absent: launching the app shows the setup alert before the tray icon appears.",
+        "With venv present (second launch): `run_first_launch_setup()` is not called; tray icon appears directly.",
+        "With another instance already running: `ensure_single_instance()` exits 0 before reaching the venv check — no setup alert shown.",
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T015",
+      "section": "ollama-check",
+      "title": "Add `fn ollama_available() -> bool` to `src/app.rs`",
+      "description": "Add a function that probes Ollama by attempting a TCP connection to `127.0.0.1:11434` with a 1-second timeout, per `specs/packaging.md`:\n\n```rust\nfn ollama_available() -> bool {\n    use std::net::TcpStream;\n    use std::time::Duration;\n    TcpStream::connect_timeout(\n        &\"127.0.0.1:11434\".parse().unwrap(),\n        Duration::from_secs(1),\n    ).is_ok()\n}\n```\n\nConnection-only: no data is sent. Returns `true` if the connection succeeds (Ollama is running), `false` on any error.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With Ollama running (`ollama serve`): `ollama_available()` returns `true`.",
+        "With Ollama stopped: `ollama_available()` returns `false` within ~1 second."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T016",
+      "section": "ollama-check",
+      "title": "Probe Ollama availability before `run_llm_collect()` in `run_pipeline_inner()`",
+      "description": "In `run_pipeline_inner()` in `src/app.rs`, inside the `if !config.selected_prompt.is_empty()` branch, immediately before the `run_llm_collect()` call, add:\n\n```rust\nif !ollama_available() {\n    anyhow::bail!(\n        \"Ollama not running. Start Ollama and try again.\\n\\\n         Run `ollama serve` in a terminal, or open the Ollama app.\"\n    );\n}\n```\n\nThe error propagates as `AppEvent::PipelineDone(Err(...))`, which the existing handler displays as an NSAlert and transitions back to Idle. The probe is skipped entirely when `selected_prompt` is empty ('No Prompt' mode), per the spec.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With Ollama stopped and a prompt selected: press hotkey, speak, stop — 'Ollama not running' alert appears; icon returns to idle.",
+        "With 'No Prompt' selected and Ollama stopped: transcription completes normally, raw transcript on clipboard — no Ollama alert.",
+        "With Ollama running and a prompt selected: pipeline completes normally."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T014",
+      "section": "whisper-model",
+      "title": "Write Whisper model download warning to stderr in `src/core/transcribe.py` before `load_model()`",
+      "description": "Per `specs/packaging.md`: 'transcribe.py writes a single log line to stderr before loading: \"Downloading Whisper base model (~145 MB) — first use only…\"'. The Rust binary captures and ignores all stderr in app mode; in CLI mode the user sees it on the terminal.\n\nIn `transcribe()` in `src/core/transcribe.py`, add a print to stderr immediately before `whisper.load_model(model_name)`:\n\n```python\nprint(\n    f\"Downloading Whisper {model_name} model — first use only (may take 1–3 minutes)…\",\n    file=sys.stderr,\n)\nmodel = whisper.load_model(model_name)\n```\n\nThe `sys` import is already present.",
+      "checks": [
+        "Confirm the `print(…, file=sys.stderr)` line appears immediately before `whisper.load_model(model_name)` in `transcribe()`.",
+        "Run `python3 src/core/transcribe.py <wav_path> 2>&1 | grep -i download` — confirm the line appears.",
+        "In app mode: the line is captured by Rust's stderr pipe and never shown to the user — no change in app behaviour."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T002",
+      "section": "bundle-metadata",
+      "title": "Create `assets/Info.plist` with all required bundle keys",
+      "description": "Create `assets/Info.plist` (source-controlled; copied into the bundle by `make app`). Required keys and values per `specs/packaging.md`:\n\n| Key | Value |\n|-----|-------|\n| CFBundleIdentifier | com.yaptap.app |\n| CFBundleName | YapTap |\n| CFBundleDisplayName | YapTap |\n| CFBundleVersion | 0.3.0 |\n| CFBundleShortVersionString | 0.3 |\n| CFBundleIconFile | YapTap |\n| CFBundleExecutable | yaptap |\n| CFBundlePackageType | APPL |\n| LSUIElement | true (boolean, NOT string) |\n| LSMinimumSystemVersion | 12.0 |\n| NSHighResolutionCapable | true (boolean) |\n| NSMicrophoneUsageDescription | YapTap records audio to transcribe your speech. |\n| NSPrincipalClass | NSApplication |",
+      "checks": [
+        "Run `plutil -lint assets/Info.plist` — exit 0 (valid XML plist).",
+        "Run `plutil -p assets/Info.plist` and confirm all 13 keys are present with correct values.",
+        "Confirm LSUIElement is boolean `1` (not string `true`) in the plutil output.",
+        "Run `make app` and confirm `dist/YapTap.app/Contents/Info.plist` is byte-identical to `assets/Info.plist`."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T001",
+      "section": "makefile",
+      "title": "Create `Makefile` at project root with `build`, `icns`, `app`, `dmg`, and `clean` targets",
+      "description": "Create `Makefile` at the project root (source-controlled). Content must match `specs/packaging.md` exactly.\n\n- `build`: `cargo build --release`\n- `icns`: generates all ten iconset sizes from `assets/icons/yaptap-idle@2x.png` via `sips`, then runs `iconutil -c icns $(ICONSET) -o $(ICNS)` to produce `assets/icons/YapTap.icns`\n- `app` (depends on `build icns`): runs `rm -rf $(APP_DIR)`, creates all subdirectories, copies binary to `Contents/MacOS/`, `assets/Info.plist` to `Contents/`, all `.toml` prompts to `Contents/Resources/config/prompts/`, all four icon PNGs to `Contents/Resources/icons/`, `src/core/transcribe.py` and `llm.py` to `Contents/Resources/scripts/`, and `YapTap.icns` to `Contents/Resources/`\n- `dmg` (depends on `app`): runs `rm -rf $(STAGING_DIR) $(DMG_PATH)`, creates staging dir, copies app, creates `/Applications` symlink, runs `hdiutil create -volname YapTap -srcfolder $(STAGING_DIR) -ov -format UDZO $(DMG_PATH)`, removes staging, prints `Built: $(DMG_PATH)`\n- `clean`: `cargo clean && rm -rf $(DIST) $(ICONSET) $(ICNS)`\n\nAll five targets declared `.PHONY`. Variable names: `DIST`, `APP_DIR`, `CONTENTS`, `STAGING_DIR`, `DMG_PATH`, `SOURCE_ICON`, `ICONSET`, `ICNS`.",
+      "checks": [
+        "Run `make build` — exit 0 and `target/release/yaptap` exists.",
+        "Run `make icns` — `assets/icons/AppIcon.iconset/` contains all ten PNGs and `assets/icons/YapTap.icns` is generated.",
+        "Run `make app` — `dist/YapTap.app/Contents/MacOS/yaptap` is executable, `Contents/Info.plist` exists, `Contents/Resources/config/prompts/` contains all TOML files, `Contents/Resources/icons/` contains all four PNGs, `Contents/Resources/scripts/transcribe.py` and `llm.py` exist, `Contents/Resources/YapTap.icns` exists.",
+        "Run `make dmg` — `dist/YapTap.dmg` is created and the terminal prints 'Built: dist/YapTap.dmg'.",
+        "Run `make clean` — `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` are all removed."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T003",
+      "section": "gitignore",
+      "title": "Add `dist/`, `assets/icons/AppIcon.iconset/`, and `assets/icons/YapTap.icns` to `.gitignore`",
+      "description": "Append three lines to `.gitignore` (all generated artifacts). The existing entries (`/target/`, `**/__pycache__/`, `*.pyc`) must be preserved unchanged.",
+      "checks": [
+        "Confirm all three new lines are present in `.gitignore` alongside the existing entries.",
+        "Run `make app` then `git status` — `dist/` and generated icon files do not appear as untracked.",
+        "Confirm `assets/Info.plist` and `Makefile` DO appear as untracked (they are source-controlled)."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T017",
+      "section": "verification",
+      "title": "Verify `cargo build --release`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
+      "description": "After completing P8-T004 through P8-T016, run a full build, lint, and test pass to confirm no regressions.",
+      "checks": [
+        "Run `cargo build --release` — exit 0.",
+        "Run `cargo clippy -- -D warnings` — no warnings, exit 0.",
+        "Run `cargo test` — all tests pass."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T018",
+      "section": "verification",
+      "title": "Verify `make app` produces the correct `dist/YapTap.app` directory structure",
+      "description": "Run `make app` and confirm every required file is present in the correct location.",
+      "checks": [
+        "Run `make app` — exit 0.",
+        "`file dist/YapTap.app/Contents/MacOS/yaptap` shows 'Mach-O 64-bit executable'.",
+        "`plutil -lint dist/YapTap.app/Contents/Info.plist` exits 0.",
+        "`ls dist/YapTap.app/Contents/Resources/config/prompts/*.toml` shows all five prompt files.",
+        "All four icon PNGs present in `dist/YapTap.app/Contents/Resources/icons/`.",
+        "`dist/YapTap.app/Contents/Resources/scripts/transcribe.py` and `llm.py` exist.",
+        "`dist/YapTap.app/Contents/Resources/YapTap.icns` exists.",
+        "Launch `dist/YapTap.app` from Finder — menu bar icon appears, no crash."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P8-T019",
+      "section": "verification",
+      "title": "Verify `make dmg` produces a working `dist/YapTap.dmg`",
+      "description": "Run `make dmg` and verify the disk image mounts and installs correctly.",
+      "checks": [
+        "Run `make dmg` — exit 0, prints 'Built: dist/YapTap.dmg'.",
+        "Mount: `open dist/YapTap.dmg` — Finder shows a volume named 'YapTap' containing `YapTap.app` and an `Applications` symlink.",
+        "Drag `YapTap.app` to the Applications shortcut — app copies to `/Applications/YapTap.app`.",
+        "Eject the DMG.",
+        "Launch `/Applications/YapTap.app` — menu bar icon appears and the full pipeline (hotkey → record → transcribe → clipboard) works."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T020",
+      "section": "verification",
+      "title": "Smoke test first-launch setup from the bundled app",
+      "description": "Verify the first-launch Python setup flow end-to-end.",
+      "checks": [
+        "Remove the venv: `rm -rf ~/.config/yaptap/.venv`.",
+        "Launch `dist/YapTap.app` from Finder — 'Setting up YapTap…' alert window appears within 1 second with no buttons.",
+        "Alert auto-dismisses after ~30 seconds.",
+        "Confirm `~/.config/yaptap/.venv/bin/python` and `.venv/bin/pip` exist.",
+        "Press the hotkey, speak, stop — transcription succeeds (venv python used; no 'python not found' error).",
+        "Quit and relaunch — setup alert does NOT appear; tray icon appears directly."
+      ],
+      "implementation_status": "to do"
+    },
+    {
+      "id": "P8-T021",
+      "section": "verification",
+      "title": "Smoke test Ollama availability check",
+      "description": "Verify the Ollama probe produces the correct alert and is correctly skipped in 'No Prompt' mode.",
+      "checks": [
+        "Ensure Ollama is NOT running (`pkill ollama` or quit the Ollama app).",
+        "Select any prompt; press hotkey, speak, stop — 'Ollama not running' alert appears; icon returns to idle.",
+        "Switch to 'No Prompt'; press hotkey, speak, stop — raw transcript on clipboard; no Ollama alert.",
+        "Start Ollama (`ollama serve`); re-select a prompt; repeat — LLM result on clipboard."
+      ],
+      "implementation_status": "to do"
+    }
+  ]
+}

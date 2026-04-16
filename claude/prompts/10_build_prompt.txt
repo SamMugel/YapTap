@@ -4,15 +4,15 @@
 
 0c. study claude/rules/*
 
-1. Your task is to finish bug fixing phase 3 specs using parrallel subagents. Follow the PRD/PRD_6.json and choose the most important 10 incomplete tasks. Before making changes search codebase (don't assume not implemented) using subagents. You may use up to 500 parrallel subagents for all operations but only 1 subagent for build/tests of rust.
+1. Your task is to finish bug fixing phase 3 specs using parrallel subagents. Follow the PRD/PRD_7.json and choose the most important 10 incomplete tasks. Before making changes search codebase (don't assume not implemented) using subagents. You may use up to 500 parrallel subagents for all operations but only 1 subagent for build/tests of rust.
 
 2. After implementing functionality or resolving problems, run the tests for that unit of code that was improved. If functionality is missing then it's your job to add it as per the application specifications. Think hard.
 
-3. When you discover a parser, lexer, control flow or LLVM issue. Immediately update PRD/PRD_6.json with your findings using a subagent. When the issue is resolved, update PRD/PRD_6.json and remove the item using a subagent.
+3. When you discover a parser, lexer, control flow or LLVM issue. Immediately update PRD/PRD_7.json with your findings using a subagent. When the issue is resolved, update PRD/PRD_7.json and remove the item using a subagent.
 
-4. When the tests pass update the PRD_6.json, then add changed code and @PRD/PRD_6.json with "git add -A" via bash then do a "git commit" with a message that describes the changes you made to the code. After the commit do a "git push" to push the changes to the remote repository.
+4. When the tests pass update the PRD_7.json, then add changed code and @PRD/PRD_7.json with "git add -A" via bash then do a "git commit" with a message that describes the changes you made to the code. After the commit do a "git push" to push the changes to the remote repository.
 
-DEFINITION OF DONE: all tasks in PRD_6.json are marked "done" and unit tests run
+DEFINITION OF DONE: all tasks in PRD_7.json are marked "done" and unit tests run
 
 9999. Important: We want single sources of truth, no migrations/adapters. If tests unrelated to your work fail then it's your job to resolve these tests as part of the increment of change.
 
@@ -20,18 +20,18 @@ DEFINITION OF DONE: all tasks in PRD_6.json are marked "done" and unit tests run
 
 999999999. You may add extra logging if required to be able to debug the issues.
 
-9999999999. ALWAYS KEEP @PRD/PRD_6.json up to do date with your learnings using a subagent. Especially after wrapping up/finishing your turn.
+9999999999. ALWAYS KEEP @PRD/PRD_7.json up to do date with your learnings using a subagent. Especially after wrapping up/finishing your turn.
 
 99999999999. When you learn something new about how to run the app or examples make sure you update @AGENT.md using a subagent but keep it brief. For example if you run commands multiple times before learning the correct command then that file should be updated.
 
-99999999999999. IMPORTANT when you discover a bug resolve it using subagents even if it is unrelated to the current piece of work after documenting it in @PRD/PRD_6.json
+99999999999999. IMPORTANT when you discover a bug resolve it using subagents even if it is unrelated to the current piece of work after documenting it in @PRD/PRD_7.json
 
 9999999999999999999. Keep AGENT.md up to date with information on how to run the app and your learnings to optimise the build/test loop using a subagent.
 
 
-999999999999999999999. For any bugs you notice, it's important to resolve them or document them in @PRD/PRD_6.json to be resolved using a subagent.
+999999999999999999999. For any bugs you notice, it's important to resolve them or document them in @PRD/PRD_7.json to be resolved using a subagent.
 
-99999999999999999999999999. When @PRD/PRD_6.json becomes large periodically clean out the items that are completed from the file using a subagent.
+99999999999999999999999999. When @PRD/PRD_7.json becomes large periodically clean out the items that are completed from the file using a subagent.
 
 99999999999999999999999999. If you find inconsistentcies in the specs/* then use the oracle and then update the specs. Specifically around types and lexical tokens.
 

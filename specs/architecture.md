@@ -110,6 +110,8 @@ YapTap/
 
 `yaptap` communicates with Python scripts through a simple stdio contract. The authoritative details are in [transcription.md](transcription.md) and [llm.md](llm.md); this is a summary.
 
+> **Phase 3 note:** Inside the `.app` bundle the scripts are at `<resources>/scripts/{transcribe,llm}.py` and the interpreter is `~/.config/yaptap/.venv/bin/python`. During development (`cargo run`) they remain at `src/core/` and `python3` is used. See [packaging.md](packaging.md).
+
 | Script | stdin | stdout | stderr | exit code |
 |---|---|---|---|---|
 | `transcribe.py` | nothing (WAV path is a CLI arg) | UTF-8 transcript, newline-terminated | forwarded for debugging | 0 success / non-zero error |
@@ -139,9 +141,11 @@ Note: user-facing terminal output (the transcript, status lines) uses `println!`
 - `ffmpeg` — required by Whisper for audio decoding; must be on `PATH`
 
 ### Python
-- `openai-whisper` — transcription (installed in user environment)
+- `openai-whisper` — transcription
 - `ollama` — LLM client (phase 2)
 - Standard library: `argparse`, `sys`, `pathlib`, `logging`, `tomllib` (Python 3.11+)
+
+> **Phase 3 note:** Both packages are installed automatically into `~/.config/yaptap/.venv/` on first launch of the `.app` bundle. For CLI/development use (phases 1 & 2) they must be installed manually. See [packaging.md](packaging.md).
 
 ---
 
@@ -184,12 +188,18 @@ Note: user-facing terminal output (the transcript, status lines) uses `println!`
 
 ```
 YapTap/
+├── Makefile                      # build targets: build, icns, app, dmg, clean
 ├── assets/
+│   ├── Info.plist                # macOS app bundle metadata (source-controlled)
 │   └── icons/
 │       ├── yaptap-idle.png       # menu bar icon — idle state (@1×)
 │       ├── yaptap-idle@2x.png    # menu bar icon — idle state (@2×, Retina)
 │       ├── yaptap-active.png     # menu bar icon — active state (@1×)
 │       └── yaptap-active@2x.png  # menu bar icon — active state (@2×, Retina)
+│       # AppIcon.iconset/ and YapTap.icns are generated artifacts (git-ignored)
+├── dist/                         # build output (git-ignored)
+│   ├── YapTap.app/               # assembled app bundle
+│   └── YapTap.dmg                # distributable disk image
 └── PRD/
     └── PRD_3.json               # phase 3 task tracking
 ```

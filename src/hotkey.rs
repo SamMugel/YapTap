@@ -151,6 +151,26 @@ pub fn ax_is_process_trusted() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
+// ── Input Monitoring permission check (macOS 14+) ───────────────────────────
+//
+// On macOS 14 (Sonoma) and later, CGEventTap requires BOTH Accessibility AND
+// Input Monitoring (Privacy & Security → Input Monitoring) to receive keyboard
+// events system-wide.  If Input Monitoring is absent, CGEventTapCreate
+// succeeds and rdev::listen() returns no error, but no key events are
+// delivered — the hotkey silently does nothing (P4-I002).
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGPreflightListenEventAccess() -> bool;
+}
+
+/// Returns `true` if the process has Input Monitoring (Listen Event) access.
+/// On macOS 13 and earlier this always returns `true` (not enforced).
+/// On macOS 14+ the user must grant this in System Settings.
+pub fn input_monitoring_trusted() -> bool {
+    unsafe { CGPreflightListenEventAccess() }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

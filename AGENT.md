@@ -17,6 +17,8 @@
 - `src/hotkey.rs` — Global hotkey parsing and AXIsProcessTrusted check
 - `src/transcription.rs` — run_transcription() wrapper for transcribe.py subprocess
 - `src/llm.rs` — run_llm_collect() wrapper for llm.py subprocess (buffers output)
+- `Makefile` — build/icns/app/dmg/clean targets for app bundle and DMG packaging
+- `assets/Info.plist` — macOS bundle metadata (source-controlled)
 - `assets/icons/` — Menu bar icon PNGs (idle/active @1x and @2x)
 - `PRD/PRD_3.json` — Phase 3 task tracking
 
@@ -33,6 +35,12 @@ cargo clippy -- -D warnings
 
 # Install binary
 cargo install --path .
+
+# Build distributable app bundle (requires assets/icons/yaptap-idle@2x.png)
+make app
+
+# Build distributable DMG
+make dmg
 ```
 
 ## Test Commands
@@ -65,6 +73,7 @@ yaptap --prompt-file my-prompt.toml # phase 2: record → transcript → LLM wit
 - `ollama` server running with at least one model pulled (phase 2)
 - macOS (cpal uses CoreAudio)
 - `macOS Accessibility permission` — required for global hotkey (grant in System Settings → Privacy & Security → Accessibility)
+- First launch: creates `~/.config/yaptap/.venv/` with openai-whisper and ollama installed
 
 ## Debugging
 ```bash

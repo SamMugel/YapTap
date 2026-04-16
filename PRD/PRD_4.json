@@ -15,7 +15,7 @@
         "If the checkbox was just checked, quit and re-launch (permission takes effect only after restart per spec).",
         "Add a launch-time log: in run_app() before the AXIsProcessTrusted() check, emit `tracing::info!(trusted = crate::hotkey::ax_is_process_trusted(), \"accessibility trust\")` and confirm the value in Console.app."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I002",
@@ -28,7 +28,7 @@
         "If absent: grant it and restart the app.",
         "As a long-term fix, add a runtime check alongside the Accessibility check: query the TCC database or test for a synthetic event and emit a show_alert() if Input Monitoring appears absent."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I003",
@@ -39,7 +39,7 @@
         "Confirm the user quit and re-launched after granting permission, not just switched back to the app.",
         "To confirm the rdev thread is alive: add `tracing::info!(\"rdev thread spawned\")` at src/app.rs:438 and check Console.app after launch."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I005",
@@ -74,7 +74,7 @@
         "Reproduce the failure: confirm no password prompt or secure input field is active in any focused app at the time the hotkey is pressed.",
         "Document this known limitation in a code comment at the rdev thread spawn site (src/app.rs:438)."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I008",
@@ -85,7 +85,7 @@
         "Test with the LEFT ⌥Option key (left of spacebar) vs the RIGHT ⌥Option key (right of spacebar) — does only one work?",
         "Fix: in parse_modifier(), return a new two-element vec or change the matching logic to treat both Alt and AltGr as satisfying an 'option' modifier. One approach: extend ParsedHotkey.modifiers to a set and add both Key::Alt and Key::AltGr when 'option' is parsed."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I009",
@@ -96,7 +96,7 @@
         "Hold ⌥Space for ~300 ms and observe whether the app transitions directly to Processing without the user releasing the key.",
         "Add a counter to the rdev callback and log how many HotkeyPressed events are sent per physical keypress."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I010",
@@ -108,7 +108,7 @@
         "Test: press and release Option repeatedly while watching the logs; confirm no unbalanced insertions accumulate.",
         "Mitigation: clear the pressed HashSet on any event whose type is not KeyPress or KeyRelease (e.g. on mouse click or focus change event if rdev surfaces one), or implement a maximum staleness timer."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I011",
@@ -119,7 +119,7 @@
         "Test: with another app focused, hold Space then press Option — does yaptap start recording?",
         "The fix is a one-line change: replace `if modifiers_held && pressed.contains(&parsed.key)` with `if modifiers_held && key == parsed.key` (using the key variable from the outer KeyPress match arm)."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I012",
@@ -130,7 +130,7 @@
         "Trigger a pipeline error alert; press ⌥Space while the alert is open; dismiss the alert and observe whether the app immediately starts recording.",
         "Fix: after each runModal call returns, drain app_event_rx with a while-let discard loop before continuing the main event loop."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I013",
@@ -141,7 +141,7 @@
         "Press ⌥Space twice in app mode and observe the error alert. The message will be a spawn error or 'python3: can't open file' — confirm this.",
         "Fix: resolve the script paths relative to the binary using `std::env::current_exe()?.parent()?.join(\"../src/core/transcribe.py\")` (development layout) or embed scripts as resources in a production bundle. Mirror the prompts_dir() logic in config.rs which already handles the binary-relative fallback."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I014",
@@ -152,7 +152,7 @@
         "Introduce a syntax error in ~/.config/yaptap/config.toml and launch the app. Confirm no alert appears (reproducing the bug).",
         "Implement the deferred-alert pattern described above and re-test: the alert should appear after the menu bar icon is visible."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I018",
@@ -188,7 +188,7 @@
         "If the icon never changes, the problem is upstream (hotkey not delivered to the main loop); if it changes but returns to idle quickly, the pipeline is failing.",
         "Add `tracing::info!(\"hotkey received, state = {:?}\", state)` at src/app.rs:552 to make hotkey delivery visible in Console.app without needing a UI change."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I021",
@@ -199,7 +199,7 @@
         "Confirm no show_alert() or msg_send! calls exist inside the rdev::listen() callback — they do not (correct).",
         "Add a code comment above the callback closure: `// SAFETY: This closure runs on the rdev CGEventTap thread. No Cocoa/AppKit calls are permitted here. All UI feedback must go via the AppEvent channel.`"
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I022",
@@ -211,7 +211,7 @@
         "Replace each eprintln! in config.rs with the appropriate tracing level: I/O and serialisation warnings → `tracing::warn!`, using structured key-value fields not interpolated strings.",
         "Run `cargo clippy -- -D warnings` after the change to confirm no new warnings are introduced."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I023",
@@ -223,7 +223,7 @@
         "Add a `// SAFETY:` comment above each unsafe block explaining: (a) why the Cocoa object pointers are valid, (b) that msg_send! is only called from the main thread, (c) why autorelease pool drain is sound.",
         "Expand the SharedState Sync justification: 'SAFETY: SharedState is Sync because all fields are Arc<Mutex<T>>, which are Sync. The unsafe impl is required because AudioHandle contains cpal::Stream which is !Send on macOS; access is always mediated by the Mutex guard.'"
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I024",
@@ -235,7 +235,7 @@
         "Replace `config.selected_prompt == \"\"` with `config.selected_prompt.is_empty()` in both locations.",
         "For the arc_with_non_send_sync allow: add a comment explaining it is suppressed because AudioHandle contains cpal::Stream which is !Send by cpal's design, and access is guarded by a Mutex."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I025",
@@ -246,7 +246,7 @@
         "Run `grep -n 'let _ = menu.append' src/app.rs` to confirm all affected lines.",
         "Replace each with the tracing::warn! pattern above."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I026",
@@ -258,7 +258,7 @@
         "If no API exists, add a code comment on both `#[allow(dead_code)]` lines: `// tray-icon 0.14 has no @2x API; retained for when Retina support is added.`",
         "As an alternative path: investigate whether the NSStatusBarButton's NSImage can be replaced with the @2x asset via unsafe Cocoa calls (similar approach to the template flag in P4-I018). If feasible, implement it alongside P4-I018; if not, document why in a code comment."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }

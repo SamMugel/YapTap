@@ -39,11 +39,74 @@ pub fn config_path() -> PathBuf {
         .join(".config/yaptap/config.toml")
 }
 
+/// Returns the bundle's Resources directory at runtime.
+///
+/// - **Bundle** (`Contents/MacOS/yaptap`): `../Resources` = `Contents/Resources/` — exists → returned.
+/// - **Dev build** (`target/debug/yaptap` from project root): `../Resources` does not exist →
+///   `current_dir()` returned.
+pub fn resources_dir() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(macos_dir) = exe.parent() {
+            let candidate = macos_dir.join("../Resources");
+            if candidate.exists() {
+                return candidate.canonicalize().unwrap_or(candidate);
+            }
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// Returns the Python interpreter path for subprocess calls.
+///
+/// Returns the absolute venv interpreter path if `~/.config/yaptap/.venv/bin/python` exists;
+/// otherwise falls back to `"python3"` (PATH lookup).
+pub fn python_interpreter() -> String {
+    let venv_python = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config/yaptap/.venv/bin/python");
+    if venv_python.is_file() {
+        venv_python.to_string_lossy().into_owned()
+    } else {
+        "python3".to_string()
+    }
+}
+
+/// Returns an augmented PATH that prepends common Homebrew/tool locations.
+///
+/// macOS app bundles launched from Finder inherit a minimal PATH
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`) that excludes Homebrew directories.
+/// Prepending them ensures subprocesses (ffmpeg, python3, pip) are found.
+pub fn brew_augmented_path() -> String {
+    let extra = [
+        "/opt/homebrew/bin", // Apple Silicon Homebrew
+        "/usr/local/bin",    // Intel Homebrew / common tools
+        "/opt/local/bin",    // MacPorts (less common)
+    ];
+    let current = std::env::var("PATH").unwrap_or_default();
+    let mut parts: Vec<&str> = extra
+        .iter()
+        .copied()
+        .filter(|d| std::path::Path::new(d).is_dir())
+        .collect();
+    if !current.is_empty() {
+        parts.push(&current);
+    }
+    parts.join(":")
+}
+
 /// Returns the prompts directory.
 ///
-/// Prefers `<binary_dir>/config/prompts` (installed layout); falls back to
-/// `<cwd>/config/prompts` for development builds.
+/// Candidate order:
+/// 1. `resources_dir().join("config/prompts")` — bundle layout
+/// 2. `<binary_dir>/config/prompts` — dev build
+/// 3. `<cwd>/config/prompts` — cwd fallback
 pub fn prompts_dir() -> Option<PathBuf> {
+    // Candidate 1: bundle layout (Contents/Resources/config/prompts/).
+    let resources_candidate = resources_dir().join("config/prompts");
+    if resources_candidate.is_dir() {
+        return Some(resources_candidate);
+    }
+    // Candidate 2: <binary_dir>/config/prompts (dev build).
     let bin_relative = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("config/prompts")));
@@ -52,6 +115,7 @@ pub fn prompts_dir() -> Option<PathBuf> {
             return bin_relative;
         }
     }
+    // Candidate 3: <cwd>/config/prompts (cwd fallback).
     std::env::current_dir()
         .ok()
         .map(|d| d.join("config/prompts"))

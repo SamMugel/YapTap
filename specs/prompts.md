@@ -30,10 +30,10 @@ The `system` field is passed as the system message to the LLM. The transcript is
 
 ## Prompt Directory
 
-Prompts live in `config/prompts/` relative to the directory containing the `yaptap` binary. At runtime, Rust resolves this path as `<binary_dir>/config/prompts/` using `std::env::current_exe()`.
+Prompts live in `config/prompts/` under the app's resources directory. At runtime, Rust resolves the resources directory via `resources_dir()` (see [packaging.md](packaging.md)), which returns `Contents/Resources/` when running inside the `.app` bundle, or the project root during development (`cargo run`). The full resolved path is:
 
 ```
-<binary_dir>/config/prompts/
+<resources_dir>/config/prompts/
 ```
 
 This directory is the single source of truth for all prompts. Users add or edit `.toml` files here directly.
@@ -56,7 +56,7 @@ This directory is the single source of truth for all prompts. Users add or edit 
 
 When `--prompt <name>` is passed, `yaptap` resolves the prompt file as follows:
 
-1. Look for `<binary_dir>/config/prompts/<name>.toml` (see Prompt Directory above for path resolution).
+1. Look for `<resources_dir>/config/prompts/<name>.toml` (see Prompt Directory above for path resolution).
 2. If not found, print `error: prompt '<name>' not found in config/prompts/` to stderr, exit 1.
 
 When `--prompt-file <path>` is passed:

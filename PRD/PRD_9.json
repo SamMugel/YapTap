@@ -1,0 +1,104 @@
+{
+  "phase": 9,
+  "phase_name": "Fix: Homebrew PATH not inherited by app bundle subprocesses",
+  "goal": "When YapTap.app is launched from Finder, the macOS process environment PATH is minimal (/usr/bin:/bin:/usr/sbin:/sbin) and does not include Homebrew's binary directories (/opt/homebrew/bin on Apple Silicon, /usr/local/bin on Intel). This causes the ffmpeg and python3 pre-flight checks — and all subprocess spawns — to fail even when those tools are installed. The fix is a single `brew_augmented_path()` helper in config.rs that prepends known Homebrew/common locations to the inherited PATH, applied uniformly to every Command spawn in the app.",
+  "root_cause": "macOS does not source the user's shell profile (.zshrc, .bash_profile) for GUI apps launched via Finder, Dock, or login items. Homebrew modifies the shell PATH but this is invisible to the app bundle process.",
+  "tasks": [
+    {
+      "id": "P9-T001",
+      "section": "path-augmentation",
+      "title": "Add `pub fn brew_augmented_path() -> String` to `src/config.rs`",
+      "description": "Add a helper that returns a PATH string prepending known Homebrew binary directories to the current PATH environment variable. This is the single source of truth used by all subprocess spawns in the codebase.\n\n```rust\n/// Returns an augmented PATH that prepends common Homebrew/tool locations.\n///\n/// macOS app bundles launched from Finder inherit a minimal PATH\n/// (`/usr/bin:/bin:/usr/sbin:/sbin`) that excludes Homebrew directories.\n/// Prepending them ensures subprocesses (ffmpeg, python3, pip) are found.\npub fn brew_augmented_path() -> String {\n    let extra = [\n        \"/opt/homebrew/bin\",  // Apple Silicon Homebrew\n        \"/usr/local/bin\",     // Intel Homebrew / common tools\n        \"/opt/local/bin\",     // MacPorts (less common)\n    ];\n    let current = std::env::var(\"PATH\").unwrap_or_default();\n    let mut parts: Vec<&str> = extra\n        .iter()\n        .copied()\n        .filter(|d| std::path::Path::new(d).is_dir())\n        .collect();\n    if !current.is_empty() {\n        parts.push(&current);\n    }\n    parts.join(\":\")\n}\n```\n\nPlace after `python_interpreter()` and before `prompts_dir()`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "On Apple Silicon: `brew_augmented_path()` contains `/opt/homebrew/bin` as the first segment.",
+        "On Intel Mac: `brew_augmented_path()` contains `/usr/local/bin` as the first segment.",
+        "The existing PATH segments are preserved at the end."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T002",
+      "section": "path-augmentation",
+      "title": "Apply `brew_augmented_path()` to pre-flight checks in `run_pipeline_inner()` (`src/app.rs`)",
+      "description": "The two pre-flight `Command` calls in `run_pipeline_inner()` use bare executable names that fail when launched from Finder. Add `.env(\"PATH\", crate::config::brew_augmented_path())` to both.\n\nCurrent python3 check:\n```rust\nlet py_ok = std::process::Command::new(\"python3\")\n    .arg(\"--version\")\n    .output()\n    .map(|o| o.status.success())\n    .unwrap_or(false);\n```\nAdd `.env(\"PATH\", crate::config::brew_augmented_path())` before `.output()`.\n\nCurrent ffmpeg check:\n```rust\nlet ff_ok = std::process::Command::new(\"ffmpeg\")\n    .arg(\"-version\")\n    .output()\n    .map(|o| o.status.success())\n    .unwrap_or(false);\n```\nAdd `.env(\"PATH\", crate::config::brew_augmented_path())` before `.output()`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Launch `dist/YapTap.app` from Finder with ffmpeg installed in /opt/homebrew/bin — pipeline does not fail with 'ffmpeg not found on PATH'.",
+        "Remove ffmpeg temporarily: pipeline fails with 'ffmpeg not found on PATH' (check still works)."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T003",
+      "section": "path-augmentation",
+      "title": "Apply `brew_augmented_path()` to `run_setup_commands()` in `src/app.rs`",
+      "description": "The `python3 -m venv` command in `run_setup_commands()` will fail on Finder-launched app if python3 is in /opt/homebrew/bin. Add `.env(\"PATH\", crate::config::brew_augmented_path())` to the `Command::new(\"python3\")` call.\n\nThe `pip` call already uses a full path from the venv, so no change needed there.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Remove `~/.config/yaptap/.venv/`; launch app from Finder — first-launch setup completes without 'failed to spawn python3' error."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T004",
+      "section": "path-augmentation",
+      "title": "Apply `brew_augmented_path()` to the subprocess `Command` in `run_transcription()` (`src/transcription.rs`)",
+      "description": "The Python subprocess spawned for transcription runs `whisper`, which calls `ffmpeg` internally. Without an augmented PATH, whisper cannot locate ffmpeg even if it is installed. Add `.env(\"PATH\", crate::config::brew_augmented_path())` to the `Command` builder in `run_transcription()`.\n\nCurrent:\n```rust\nlet mut cmd = Command::new(crate::config::python_interpreter());\ncmd.arg(&script)\n    .arg(wav_path)\n    .args([\"--model\", model])\n    .stdout(Stdio::piped())\n    .stderr(Stdio::piped());\n```\n\nAdd after `.stderr(Stdio::piped())`:\n```rust\n    .env(\"PATH\", crate::config::brew_augmented_path())\n```",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Launch from Finder; press hotkey, speak, stop — transcription completes without 'No such file or directory: ffmpeg' from whisper."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T005",
+      "section": "path-augmentation",
+      "title": "Apply `brew_augmented_path()` to the subprocess `Command` in `run_llm_collect()` (`src/llm.rs`)",
+      "description": "Mirror P9-T004 in `run_llm_collect()`. The LLM subprocess also inherits the app's minimal PATH; while Ollama is usually at a fixed path, consistency requires augmenting PATH here too.\n\nAdd `.env(\"PATH\", crate::config::brew_augmented_path())` to the `Command` builder in `run_llm_collect()`, after `.stderr(Stdio::piped())`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Launch from Finder with a prompt selected; trigger the pipeline — LLM step completes successfully."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T006",
+      "section": "path-augmentation",
+      "title": "Fix the post-setup `which ffmpeg` check in `run_first_launch_setup()` (`src/app.rs`)",
+      "description": "The `Command::new(\"which\").arg(\"ffmpeg\")` call in `run_first_launch_setup()` also runs in the minimal PATH context and will incorrectly report ffmpeg as missing even when it is installed.\n\nReplace:\n```rust\nlet ffmpeg_ok = std::process::Command::new(\"which\")\n    .arg(\"ffmpeg\")\n    .output()\n    .map(|o| o.status.success())\n    .unwrap_or(false);\n```\n\nWith:\n```rust\nlet ffmpeg_ok = std::process::Command::new(\"ffmpeg\")\n    .arg(\"-version\")\n    .env(\"PATH\", crate::config::brew_augmented_path())\n    .output()\n    .map(|o| o.status.success())\n    .unwrap_or(false);\n```\n\nUsing `ffmpeg -version` with the augmented PATH is both more direct and consistent with the pre-flight check in `run_pipeline_inner()`.",
+      "checks": [
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "Remove venv; launch from Finder — first-launch setup completes and the ffmpeg alert does NOT appear when ffmpeg is installed in /opt/homebrew/bin.",
+        "With ffmpeg uninstalled: ffmpeg alert appears after setup."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T007",
+      "section": "verification",
+      "title": "Verify `cargo build --release`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
+      "description": "After all P9 changes, run a full build, lint, and test pass.",
+      "checks": [
+        "Run `cargo build --release` — exit 0.",
+        "Run `cargo clippy -- -D warnings` — no warnings, exit 0.",
+        "Run `cargo test` — all tests pass."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P9-T008",
+      "section": "verification",
+      "title": "End-to-end smoke test: launch from Finder with Homebrew ffmpeg and python3",
+      "description": "Verify the full pipeline works when the app is launched from Finder (no shell PATH).",
+      "checks": [
+        "Run `make app`.",
+        "Launch `dist/YapTap.app` from Finder (not terminal).",
+        "Press hotkey, speak for 3 seconds, release — transcription completes and raw transcript appears on clipboard. No 'ffmpeg not found' or 'python3 not found' alert.",
+        "Select a prompt; repeat — LLM result appears on clipboard. No 'Ollama not running' alert (assuming Ollama is running).",
+        "Quit and relaunch from Finder — no first-launch setup alert (venv already present)."
+      ],
+      "implementation_status": "done"
+    }
+  ]
+}

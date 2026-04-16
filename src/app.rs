@@ -25,9 +25,11 @@ use crate::config::AppConfig;
 // ── Icon bytes (embedded at compile time) ─────────────────────────────────────
 
 const ICON_IDLE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-idle.png");
+// tray-icon 0.14 has no @2x API; retained for when Retina support is added.
 #[allow(dead_code)]
 const ICON_IDLE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-idle@2x.png");
 const ICON_ACTIVE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-active.png");
+// tray-icon 0.14 has no @2x API; retained for when Retina support is added.
 #[allow(dead_code)]
 const ICON_ACTIVE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-active@2x.png");
 
@@ -117,6 +119,18 @@ impl Drop for WavCleanup {
     }
 }
 
+// ── Ollama availability probe ─────────────────────────────────────────────────
+
+fn ollama_available() -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    TcpStream::connect_timeout(
+        &"127.0.0.1:11434".parse().unwrap(),
+        Duration::from_secs(1),
+    )
+    .is_ok()
+}
+
 // ── NSAlert helper ────────────────────────────────────────────────────────────
 
 /// Show a modal NSAlert dialog.  Returns the zero-based index of the button
@@ -181,6 +195,170 @@ fn ensure_single_instance() {
     }
     let our_pid = std::process::id().to_string();
     let _ = std::fs::write(&lock_path, our_pid.as_bytes());
+}
+
+// ── First-launch Python setup ─────────────────────────────────────────────────
+
+fn run_setup_commands() -> Result<(), String> {
+    let venv_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/yaptap/.venv");
+
+    let status = std::process::Command::new("python3")
+        .args(["-m", "venv"])
+        .arg(&venv_dir)
+        .env("PATH", crate::config::brew_augmented_path())
+        .status()
+        .map_err(|e| format!("failed to spawn python3: {e}"))?;
+    if !status.success() {
+        return Err("python3 -m venv exited non-zero".to_string());
+    }
+
+    let pip = venv_dir.join("bin/pip");
+    let status = std::process::Command::new(pip)
+        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama", "tomli"])
+        .status()
+        .map_err(|e| format!("failed to spawn pip: {e}"))?;
+    if !status.success() {
+        return Err("pip install exited non-zero".to_string());
+    }
+
+    Ok(())
+}
+
+/// Returns false when the venv exists but fails a required-package check:
+/// numpy must be < 2 (whisper ABI compat) and tomli/tomllib must import.
+/// Returns true when the venv is absent or all checks pass.
+fn venv_healthy() -> bool {
+    let venv_python = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/yaptap/.venv/bin/python");
+    if !venv_python.is_file() {
+        return true;
+    }
+    std::process::Command::new(&venv_python)
+        .args([
+            "-c",
+            "import numpy; v=numpy.__version__.split('.'); \
+assert int(v[0]) < 2, 'numpy>=2'; \
+import sys; \
+m='tomllib' if sys.version_info>=(3,11) else 'tomli'; \
+__import__(m)",
+        ])
+        .env("PATH", crate::config::brew_augmented_path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(true)
+}
+
+/// Attempts a lightweight in-place repair: pip-install the required packages
+/// into the existing venv. Returns true if pip exits 0.
+/// Called when venv_healthy() is false — falls back to full teardown if false.
+fn try_pip_repair() -> bool {
+    let pip = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/yaptap/.venv/bin/pip");
+    std::process::Command::new(pip)
+        .args(["install", "--quiet", "numpy<2", "tomli"])
+        .env("PATH", crate::config::brew_augmented_path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn run_first_launch_setup() {
+    // SAFETY: This function is only ever called from the main thread.
+    // NSAlert and NSWindow manipulations require the main thread.
+    let setup_window: id = unsafe {
+        let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+        // LSUIElement = true suppresses automatic front-of-stack promotion.
+        let _: () = msg_send![app, activateIgnoringOtherApps: 1u8];
+
+        let alert: id = msg_send![objc::class!(NSAlert), new];
+        let msg_cstr = CString::new(
+            "Setting up YapTap\u{2026}\n\nInstalling Python dependencies. This takes about 30 seconds.",
+        )
+        .unwrap_or_default();
+        let msg_ns: id = msg_send![objc::class!(NSString), alloc];
+        let msg_ns: id = msg_send![msg_ns, initWithUTF8String: msg_cstr.as_ptr()];
+        let (): () = msg_send![alert, setMessageText: msg_ns];
+
+        // Show the alert window non-modally (no buttons — auto-dismissed when setup completes).
+        let window: id = msg_send![alert, window];
+        let (): () = msg_send![window, orderFront: cocoa::base::nil];
+        window
+    };
+
+    // Run venv creation and pip install in a background thread.
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::spawn(move || {
+        let _ = tx.send(run_setup_commands());
+    });
+
+    // Pump the NSApp event loop until setup completes.
+    // SAFETY: nextEventMatchingMask:untilDate:inMode:dequeue: and sendEvent:
+    // are main-thread-only NSApplication methods.  run_first_launch_setup() is
+    // only ever called from the main thread (guaranteed by its call site in run_app()).
+    let setup_result: Result<(), String> = unsafe {
+        let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
+        loop {
+            let date: id = msg_send![
+                objc::class!(NSDate),
+                dateWithTimeIntervalSinceNow: 0.016_f64
+            ];
+            let mode: id = msg_send![
+                objc::class!(NSString),
+                stringWithUTF8String: c"kCFRunLoopDefaultMode".as_ptr()
+            ];
+            let event: id = msg_send![
+                app,
+                nextEventMatchingMask: u64::MAX
+                untilDate: date
+                inMode: mode
+                dequeue: 1u8
+            ];
+            if event != cocoa::base::nil {
+                let _: () = msg_send![app, sendEvent: event];
+            }
+            if let Ok(result) = rx.try_recv() {
+                break result;
+            }
+        }
+    };
+
+    // Dismiss the setup alert.
+    // SAFETY: orderOut: is a main-thread NSWindow method; this is the main thread.
+    unsafe {
+        let _: () = msg_send![setup_window, orderOut: cocoa::base::nil];
+    }
+
+    // Handle setup outcome.
+    match setup_result {
+        Ok(()) => {
+            // Check for ffmpeg after setup succeeds.
+            let ffmpeg_ok = std::process::Command::new("ffmpeg")
+                .arg("-version")
+                .env("PATH", crate::config::brew_augmented_path())
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if !ffmpeg_ok {
+                show_alert(
+                    "ffmpeg not found",
+                    "YapTap requires ffmpeg for audio processing.\nInstall it with: brew install ffmpeg",
+                    &["OK"],
+                );
+            }
+        }
+        Err(msg) => {
+            tracing::warn!(error = %msg, "first-launch setup failed");
+            show_alert(
+                "Setup failed",
+                "YapTap could not install Python dependencies. Ensure python3 is installed and try launching again.",
+                &["OK"],
+            );
+        }
+    }
 }
 
 // ── Graceful exit (P3-T067) ───────────────────────────────────────────────────
@@ -394,6 +572,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
     // ── Pre-flight checks ─────────────────────────────────────────────────────
     let py_ok = std::process::Command::new("python3")
         .arg("--version")
+        .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -403,6 +582,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 
     let ff_ok = std::process::Command::new("ffmpeg")
         .arg("-version")
+        .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -435,6 +615,13 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
 
     // ── LLM (if a prompt is selected) ────────────────────────────────────────
     let output = if !config.selected_prompt.is_empty() {
+        // Probe Ollama availability before attempting the LLM step.
+        if !ollama_available() {
+            anyhow::bail!(
+                "Ollama not running. Start Ollama and try again.\n\
+                 Run `ollama serve` in a terminal, or open the Ollama app."
+            );
+        }
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
             crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &shared.child)?
@@ -481,6 +668,32 @@ pub fn run_app() {
     // ── Single-instance guard (may exit 0 if another copy is running) ─────────
     ensure_single_instance();
 
+    // ── First-launch Python venv setup (with two-stage health repair) ────────
+    // Must be after ensure_single_instance() so the alert is never shown to a
+    // duplicate instance that is about to exit 0.
+    {
+        // Stage 1: lightweight repair — attempt pip install in-place.
+        // Stage 2: full teardown — only if pip repair fails.
+        if !venv_healthy() {
+            tracing::warn!("venv health check failed — attempting pip repair");
+            if !try_pip_repair() {
+                tracing::warn!("pip repair failed — removing venv for full re-setup");
+                let venv_dir = dirs::home_dir()
+                    .unwrap_or_default()
+                    .join(".config/yaptap/.venv");
+                let _ = std::fs::remove_dir_all(&venv_dir);
+            } else {
+                tracing::info!("pip repair succeeded");
+            }
+        }
+        let venv_python = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".config/yaptap/.venv/bin/python");
+        if !venv_python.is_file() {
+            run_first_launch_setup();
+        }
+    }
+
     // ── Shared state ──────────────────────────────────────────────────────────
     let shared = Arc::new(SharedState::new());
 
@@ -502,7 +715,9 @@ pub fn run_app() {
     let app_event_tx = Arc::new(app_event_tx);
 
     // ── Accessibility check + global hotkey thread ────────────────────────────
-    if !crate::hotkey::ax_is_process_trusted() {
+    let ax_trusted = crate::hotkey::ax_is_process_trusted();
+    tracing::info!(trusted = ax_trusted, "accessibility trust");
+    if !ax_trusted {
         let btn = show_alert(
             "Accessibility Required",
             "YapTap needs Accessibility access to capture the global hotkey.\n\nOpen System Settings \u{2192} Privacy & Security \u{2192} Accessibility?\n\nAfter granting permission, quit and relaunch YapTap to activate the hotkey.",
@@ -514,6 +729,26 @@ pub fn run_app() {
                 .spawn();
         }
     } else {
+        // P4-I002: on macOS 14 (Sonoma)+, Input Monitoring is also required.
+        // CGEventTap starts without error but silently delivers no events when
+        // this permission is absent.
+        let im_trusted = crate::hotkey::input_monitoring_trusted();
+        tracing::info!(trusted = im_trusted, "input monitoring trust");
+        if !im_trusted {
+            let btn = show_alert(
+                "Input Monitoring Required",
+                "On macOS 14 (Sonoma) and later, YapTap also needs Input Monitoring access \
+                 so the global hotkey can receive keyboard events system-wide.\n\n\
+                 Open System Settings \u{2192} Privacy & Security \u{2192} Input Monitoring?\n\n\
+                 After granting permission, quit and relaunch YapTap.",
+                &["Open Settings", "Later"],
+            );
+            if btn == 0 {
+                let _ = std::process::Command::new("open")
+                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+                    .spawn();
+            }
+        }
         match crate::hotkey::parse_hotkey(&config.hotkey) {
             Ok(parsed) => {
                 // Store the actual parsed hotkey in shared state so the main
@@ -524,6 +759,11 @@ pub fn run_app() {
                 let hotkey_str = config.hotkey.clone();
                 thread::spawn(move || {
                     tracing::debug!("rdev thread spawned");
+                    // P4-I007: CGEventTap silently receives no events while any
+                    // secure text field (password prompt, sudo, 1Password unlock)
+                    // is focused.  This is a macOS security feature that cannot
+                    // be worked around — the user must dismiss the secure field
+                    // first, then press the hotkey.
                     // tx_inner is moved into the rdev callback; tx is kept for
                     // the error path after rdev::listen() returns.
                     let tx_inner = Arc::clone(&tx);
@@ -535,6 +775,9 @@ pub fn run_app() {
                     // Declared here (thread::spawn closure scope) so it can be
                     // referenced inside the nested rdev callback closure.
                     static LISTEN_STARTED: std::sync::Once = std::sync::Once::new();
+                    // SAFETY: This closure runs on the rdev CGEventTap thread.
+                    // No Cocoa/AppKit calls are permitted here.  All UI feedback
+                    // must go via the AppEvent channel.
                     let result = rdev::listen(move |event| {
                         // P7-I009: fires on the very first event of any type,
                         // confirming the tap has started receiving events.
@@ -563,6 +806,14 @@ pub fn run_app() {
                                 // !main_key_down.
                                 if modifiers_held && key == parsed.key && !main_key_down {
                                     main_key_down = true;
+                                    // P4-I010: clear accumulated modifier keys after
+                                    // the hotkey fires so a missed modifier KeyRelease
+                                    // cannot leave a sticky modifier in `pressed` that
+                                    // would falsely satisfy `modifiers_held` on the
+                                    // next press.  Retaining only the main key means
+                                    // its KeyRelease will empty the set and reset
+                                    // main_key_down as expected.
+                                    pressed.retain(|k| *k == key);
                                     let _ = tx_inner.send(AppEvent::HotkeyPressed);
                                 }
                             }
@@ -795,6 +1046,10 @@ pub fn run_app() {
                                         format!("Failed to start recording: {e}")
                                     };
                                     show_alert("Recording Error", &msg, &["OK"]);
+                                    // P4-I012: discard AppEvents queued during the modal
+                                    // so a hotkey press during the alert does not
+                                    // immediately start a new recording on dismiss.
+                                    while app_event_rx.try_recv().is_ok() {}
                                 }
                             }
                         }
@@ -845,17 +1100,23 @@ pub fn run_app() {
                                         &format!("Failed to copy to clipboard: {e}"),
                                         &["OK"],
                                     );
+                                    // P4-I012: discard queued AppEvents during modal.
+                                    while app_event_rx.try_recv().is_ok() {}
                                 }
                             }
                         }
                         Err(msg) => {
                             show_alert("Pipeline Error", &msg, &["OK"]);
+                            // P4-I012: discard queued AppEvents during modal.
+                            while app_event_rx.try_recv().is_ok() {}
                         }
                     }
                 }
 
                 AppEvent::HotkeyError(msg) => {
                     show_alert("Hotkey Error", &msg, &["OK"]);
+                    // P4-I012: discard queued AppEvents during modal.
+                    while app_event_rx.try_recv().is_ok() {}
                 }
             }
         }
