@@ -198,6 +198,68 @@
         "Each of the five test methods has a docstring with both 'What' and 'Why' explanations."
       ],
       "status": "done"
+    },
+    {
+      "id": "P12-T018",
+      "section": "code-quality",
+      "title": "Fix `transcribe.py` logging violations \u2014 `log` name, `print()`, NullHandler, docstring",
+      "description": "Four violations of `claude/rules/python-logging.mdc` and `python-docs.mdc` in `src/core/transcribe.py`:\n\n1. **Logger name**: line 18 uses `log = logging.getLogger(__name__)` \u2014 rule requires `logger`.\n2. **print() for logging**: lines 36\u201339 use `print(f\"Loading Whisper {model_name} model\u2026\", file=sys.stderr)` \u2014 rule says 'BAD \u2014 print statement masquerading as logging'. Replace with `logger.debug(\"Loading Whisper model\", extra={\"model\": model_name})`.\n3. **Missing NullHandler**: rule requires libraries to call `logging.getLogger(__name__).addHandler(logging.NullHandler())` so log output is suppressed when no application configures logging. Add it directly after the `logger = ...` line.\n4. **Missing second debug call**: `specs/transcription.md` shows `logger.debug(\"Transcribing\", extra={\"wav_path\": wav_path})` before `model.transcribe()` \u2014 currently absent.\n5. **Missing Google-style docstring**: `transcribe()` has an INTENT comment but no `\"\"\"docstring\"\"\"` with Args/Returns/Raises sections. `python-docs.mdc` and `specs/transcription.md` both require it. Add the docstring as the first statement of the function body (before the INTENT comment).",
+      "checks": [
+        "`grep 'log = ' src/core/transcribe.py` returns no matches \u2014 only `logger`.",
+        "`grep 'print(' src/core/transcribe.py` returns only the intentional `print(transcript)` in main() and the `print(f\"error: ...\"` in main().",
+        "`grep NullHandler src/core/transcribe.py` returns a match.",
+        "`grep 'Transcribing' src/core/transcribe.py` returns a match.",
+        "`python -m unittest src.core.transcribe_test` passes."
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P12-T019",
+      "section": "code-quality",
+      "title": "Add `NullHandler` and `__all__` to `transcribe.py` and `llm.py`",
+      "description": "Two `claude/rules/python-logging.mdc` and `python-imports.mdc` violations present in both Python modules:\n\n1. **NullHandler**: `python-logging.mdc` rule: 'Libraries call `logger.info(...)` etc. and add a `NullHandler` to suppress output when no application configures logging.' Neither `transcribe.py` nor `llm.py` add a NullHandler (covered for `transcribe.py` by P12-T018; this task covers `llm.py`).\n\n2. **`__all__`**: `python-imports.mdc` rule: 'Define `__all__` in every public module to declare the public API explicitly.' Neither module defines `__all__`.\n\nFix:\n- `llm.py`: add `logger.addHandler(logging.NullHandler())` after `logger = logging.getLogger(__name__)`.\n- `llm.py`: add `__all__ = [\"stream_response\"]` after the imports block.\n- `transcribe.py`: add `__all__ = [\"transcribe\"]` after the imports block (NullHandler covered by P12-T018).",
+      "checks": [
+        "`grep NullHandler src/core/llm.py` returns a match.",
+        "`grep __all__ src/core/llm.py` returns a match.",
+        "`grep __all__ src/core/transcribe.py` returns a match.",
+        "`python -m unittest src.core.llm_test` passes."
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P12-T020",
+      "section": "code-quality",
+      "title": "Fix import violations in `transcribe_test.py`",
+      "description": "Three `python-imports.mdc` and `python-typing.mdc` violations in `src/core/transcribe_test.py`:\n\n1. **Unused import**: `from pathlib import Path` is imported but never used. Rule: 'Only import what you use; remove dead imports immediately.'\n\n2. **Import ordering**: stdlib imports are not in alphabetical order. Current order is `unittest, pathlib, tempfile, os`; correct order is `os, tempfile, unittest` then `from unittest.mock import MagicMock, patch`.\n\n3. **Late imports inside methods**: `from src.core.transcribe import transcribe` appears 5 times \u2014 once inside each test method. Rule: 'Circular imports are a design smell \u2014 restructure the code rather than working around them with late imports inside functions. If a late import is unavoidable, document exactly why.' There is no circular import here; the imports can safely be moved to module level since `patch(\"whisper.load_model\")` patches the `whisper` module's attribute at runtime, not at import time.\n\n4. **Missing `-> None` return types**: test methods lack explicit return-type annotations. `python-typing.mdc`: 'Annotate all function parameters and return types.'\n\nFix: move `from src.core.transcribe import transcribe` to module level (top of file), remove the 5 per-method import lines, remove unused `Path` import, fix import ordering, add `-> None` to all 5 test methods.",
+      "checks": [
+        "`grep 'from pathlib import Path' src/core/transcribe_test.py` returns no matches.",
+        "`grep 'from src.core.transcribe import' src/core/transcribe_test.py` returns exactly 1 match (module-level import).",
+        "`python -m unittest src.core.transcribe_test` passes."
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P12-T021",
+      "section": "code-quality",
+      "title": "Move late imports to module level in `llm_test.py`",
+      "description": "`from src.core.llm import stream_response` appears inside each test method in `src/core/llm_test.py`. This violates `python-imports.mdc`: 'If a late import is unavoidable, document exactly why.' There is no circular import or mocking reason that requires the import to be inside the method \u2014 `patch(\"ollama.chat\")` patches the `ollama` module's `chat` attribute at runtime, not at import time, so moving the import to module level is safe.\n\nFix: add `from src.core.llm import stream_response` at module level and remove the 6 per-method import lines.",
+      "checks": [
+        "`grep 'from src.core.llm import' src/core/llm_test.py` returns exactly 1 match (module-level import).",
+        "`python -m unittest src.core.llm_test` passes."
+      ],
+      "status": "done"
+    },
+    {
+      "id": "P12-T022",
+      "section": "code-quality",
+      "title": "Add `// SAFETY:` comments to `unsafe` blocks in `hotkey.rs`",
+      "description": "`claude/rules/rust-safety.mdc` states: 'Every `unsafe` block must have a comment explaining the invariant that makes it sound.'\n\nTwo `unsafe` blocks in `src/hotkey.rs` are missing `// SAFETY:` comments:\n\n1. `pub fn ax_is_process_trusted() -> bool { unsafe { AXIsProcessTrusted() } }` (around line 150)\n2. `pub fn input_monitoring_trusted() -> bool { unsafe { CGPreflightListenEventAccess() } }` (around line 172)\n\nBoth call `extern \"C\"` functions declared with `#[link(name = \"...\", kind = \"framework\")]`. The safety invariant is: the functions take no arguments, cannot cause memory unsafety through argument misuse, and are documented macOS system APIs safe to call from any thread.\n\nFix: add a `// SAFETY:` comment immediately inside each `unsafe` block explaining why the call is sound.",
+      "checks": [
+        "`grep -A1 'unsafe {' src/hotkey.rs` shows SAFETY comments on both unsafe blocks.",
+        "`cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes."
+      ],
+      "status": "done"
     }
   ]
 }

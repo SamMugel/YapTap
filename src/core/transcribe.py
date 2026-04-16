@@ -15,10 +15,27 @@ from pathlib import Path
 
 import whisper
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+__all__ = ["transcribe"]
 
 
 def transcribe(wav_path: str, model_name: str = "base") -> str:
+    """Transcribe a WAV file using Whisper and return the transcript text.
+
+    Args:
+        wav_path: Absolute path to the WAV file to transcribe.
+        model_name: Whisper model size. Defaults to "base".
+
+    Returns:
+        The transcript as a stripped string. Empty string if Whisper
+        produces no output.
+
+    Raises:
+        ValueError: If wav_path is empty or the file does not exist.
+        RuntimeError: If Whisper fails to load the model or transcribe.
+    """
     # INTENT (for AI):
     # Purpose: Load a Whisper model and transcribe a WAV file, returning the stripped transcript.
     # Invariants:
@@ -33,10 +50,7 @@ def transcribe(wav_path: str, model_name: str = "base") -> str:
     if not Path(wav_path).exists():
         raise ValueError(f"WAV file not found: {wav_path}")
 
-    print(
-        f"Loading Whisper {model_name} model…",
-        file=sys.stderr,
-    )
+    logger.debug("Loading Whisper model", extra={"model": model_name})
     try:
         model = whisper.load_model(model_name)
     except Exception as e:
@@ -44,6 +58,7 @@ def transcribe(wav_path: str, model_name: str = "base") -> str:
             f"Failed to load Whisper model '{model_name}': {e}"
         ) from e
 
+    logger.debug("Transcribing", extra={"wav_path": wav_path})
     try:
         result = model.transcribe(wav_path)
     except Exception as e:

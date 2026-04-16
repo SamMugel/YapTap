@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from src.core.llm import stream_response
+
 
 class TestStreamResponse(unittest.TestCase):
 
@@ -34,9 +36,6 @@ class TestStreamResponse(unittest.TestCase):
             ]
             with patch("ollama.chat") as mock_chat:
                 mock_chat.return_value = iter(mock_response)
-
-                from src.core.llm import stream_response
-
                 chunks = list(stream_response("some transcript", toml_path))
 
             self.assertEqual(chunks, ["Hello", " world"])
@@ -54,8 +53,6 @@ class TestStreamResponse(unittest.TestCase):
             Prevents a confusing FileNotFoundError (or silent TOML failure)
             when the Rust binary passes an uninitialised path argument.
         """
-        from src.core.llm import stream_response
-
         with self.assertRaises(ValueError):
             list(stream_response("transcript", ""))
 
@@ -71,8 +68,6 @@ class TestStreamResponse(unittest.TestCase):
             FileNotFoundError if the prompt TOML is accidentally deleted or
             mis-configured.
         """
-        from src.core.llm import stream_response
-
         with self.assertRaises(ValueError):
             list(stream_response("transcript", "/nonexistent/path/prompt.toml"))
 
@@ -95,8 +90,6 @@ class TestStreamResponse(unittest.TestCase):
             toml_path = f.name
 
         try:
-            from src.core.llm import stream_response
-
             with self.assertRaises(ValueError):
                 list(stream_response("transcript", toml_path))
         finally:
@@ -120,8 +113,6 @@ class TestStreamResponse(unittest.TestCase):
             toml_path = f.name
 
         try:
-            from src.core.llm import stream_response
-
             with self.assertRaises(ValueError):
                 list(stream_response("transcript", toml_path))
         finally:
@@ -147,8 +138,6 @@ class TestStreamResponse(unittest.TestCase):
 
         try:
             with patch("ollama.chat", side_effect=Exception("connection refused")):
-                from src.core.llm import stream_response
-
                 with self.assertRaises(RuntimeError):
                     list(stream_response("transcript", toml_path))
         finally:

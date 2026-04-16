@@ -20,6 +20,9 @@ from typing import Iterator
 import ollama
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+__all__ = ["stream_response"]
 
 
 # INTENT (for AI):

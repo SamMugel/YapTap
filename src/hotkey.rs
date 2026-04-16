@@ -159,6 +159,9 @@ extern "C" {
 /// Returns `true` if the current process has been granted Accessibility
 /// permission (required for global key capture via `rdev`).
 pub fn ax_is_process_trusted() -> bool {
+    // SAFETY: `AXIsProcessTrusted` is a documented macOS ApplicationServices API
+    // that takes no arguments, returns a plain bool, and is safe to call from any
+    // thread.  No pointers are passed in or out; there is no aliasing concern.
     unsafe { AXIsProcessTrusted() }
 }
 
@@ -179,6 +182,9 @@ extern "C" {
 /// On macOS 13 and earlier this always returns `true` (not enforced).
 /// On macOS 14+ the user must grant this in System Settings.
 pub fn input_monitoring_trusted() -> bool {
+    // SAFETY: `CGPreflightListenEventAccess` is a documented macOS CoreGraphics API
+    // that takes no arguments, returns a plain bool, and is safe to call from any
+    // thread.  No pointers are passed in or out; there is no aliasing concern.
     unsafe { CGPreflightListenEventAccess() }
 }
 
