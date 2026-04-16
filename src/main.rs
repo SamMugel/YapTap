@@ -48,9 +48,13 @@ struct Args {
     #[arg(long)]
     model: Option<String>,
 
-    /// Override the ollama model (default: llama3)
+    /// Override the LLM model name for the active provider (default: llama3)
     #[arg(long)]
     llm_model: Option<String>,
+
+    /// Override the LLM provider: ollama or compactifai
+    #[arg(long)]
+    llm_provider: Option<String>,
 
     /// List available prompts and exit
     #[arg(long)]
@@ -134,12 +138,21 @@ fn main() -> Result<()> {
     // ── Parse CLI args ────────────────────────────────────────────────────────
     let args = Args::parse();
 
+    // Validate --llm-provider if provided.
+    if let Some(ref p) = args.llm_provider {
+        if p != "ollama" && p != "compactifai" {
+            eprintln!("error: unknown llm-provider '{p}' — must be 'ollama' or 'compactifai'");
+            process::exit(1);
+        }
+    }
+
     // Mode detection: no flags → app mode
     if args.prompt.is_none()
         && args.prompt_file.is_none()
         && !args.list_prompts
         && args.model.is_none()
         && args.llm_model.is_none()
+        && args.llm_provider.is_none()
         && args.device.is_none()
     {
         app::run_app();
@@ -314,14 +327,66 @@ fn main() -> Result<()> {
 
         let llm_model = args.llm_model.as_deref().unwrap_or("llama3");
 
-        let mut llm_child = process::Command::new("python3")
+        let (config, _) = crate::config::AppConfig::load();
+        let provider = args.llm_provider.as_deref().unwrap_or(&config.llm_provider);
+        let provider = provider.to_string();
+        tracing::debug!(provider = %provider, "resolved LLM provider");
+
+        let api_key: Option<String> = if provider == "compactifai" {
+            match std::env::var("MULTIVERSE_IAM_API_KEY") {
+                Ok(key) if !key.is_empty() => {
+                    tracing::debug!(source = "env", "MULTIVERSE_IAM_API_KEY resolved");
+                    Some(key)
+                }
+                _ => {
+                    print!("CompactifAI API key not found.\nEnter your MULTIVERSE_IAM_API_KEY: ");
+                    let _ = io::stdout().flush();
+                    let mut key_input = String::new();
+                    let _ = io::stdin().read_line(&mut key_input);
+                    let key_input = key_input.trim().to_string();
+                    if key_input.is_empty() {
+                        eprintln!("error: API key must not be empty");
+                        process::exit(1);
+                    }
+                    // Persist to ~/.zshrc
+                    let zshrc_path = dirs::home_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("."))
+                        .join(".zshrc");
+                    let export_line = format!("\nexport MULTIVERSE_IAM_API_KEY=\"{}\"\n", key_input);
+                    if let Err(e) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&zshrc_path)
+                        .and_then(|mut f| {
+                            use std::io::Write;
+                            f.write_all(export_line.as_bytes())
+                        })
+                    {
+                        tracing::warn!(error = %e, "failed to save API key to ~/.zshrc — key available for this session only");
+                    } else {
+                        println!("Key saved to ~/.zshrc. Run 'source ~/.zshrc' or open a new terminal to apply globally.");
+                    }
+                    Some(key_input)
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut llm_cmd = process::Command::new("python3");
+        llm_cmd
             .arg("src/core/llm.py")
             .arg("--prompt-file")
             .arg(ppath)
             .args(["--model", llm_model])
+            .args(["--provider", &provider])
             .stdin(process::Stdio::piped())
             .stdout(process::Stdio::piped())
-            .stderr(process::Stdio::piped())
+            .stderr(process::Stdio::piped());
+        if let Some(ref key) = api_key {
+            llm_cmd.env("MULTIVERSE_IAM_API_KEY", key);
+        }
+        let mut llm_child = llm_cmd
             .spawn()
             .context("while spawning llm.py")?;
 

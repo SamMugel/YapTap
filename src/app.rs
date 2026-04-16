@@ -216,7 +216,7 @@ fn run_setup_commands() -> Result<(), String> {
 
     let pip = venv_dir.join("bin/pip");
     let status = std::process::Command::new(pip)
-        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama", "tomli"])
+        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama", "openai", "tomli"])
         .status()
         .map_err(|e| format!("failed to spawn pip: {e}"))?;
     if !status.success() {
@@ -243,7 +243,7 @@ fn venv_healthy() -> bool {
 assert int(v[0]) < 2, 'numpy>=2'; \
 import sys; \
 m='tomllib' if sys.version_info>=(3,11) else 'tomli'; \
-__import__(m)",
+__import__(m); import openai",
         ])
         .env("PATH", crate::config::brew_augmented_path())
         .output()
@@ -259,7 +259,7 @@ fn try_pip_repair() -> bool {
         .unwrap_or_default()
         .join(".config/yaptap/.venv/bin/pip");
     std::process::Command::new(pip)
-        .args(["install", "--quiet", "numpy<2", "tomli"])
+        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama", "openai", "tomli"])
         .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
@@ -624,7 +624,7 @@ fn run_pipeline_inner(shared: &SharedState, config: &AppConfig) -> anyhow::Resul
         }
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
-            crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &shared.child)?
+            crate::llm::run_llm_collect(&transcript, &prompt_path, &config.llm_model, &config.llm_provider, None, &shared.child)?
         } else {
             transcript
         }
