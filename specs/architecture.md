@@ -126,7 +126,6 @@ YapTap/
 ### Rust
 - [`cpal`](https://crates.io/crates/cpal) — cross-platform audio capture
 - [`hound`](https://crates.io/crates/hound) — WAV encoding
-- [`tempfile`](https://crates.io/crates/tempfile) — temporary WAV storage
 - [`anyhow`](https://crates.io/crates/anyhow) — error handling in the binary (`anyhow::Result<T>` + `.context()`)
 - [`ctrlc`](https://crates.io/crates/ctrlc) — SIGINT handler for temp file cleanup on Ctrl-C
 - [`tracing`](https://crates.io/crates/tracing) — structured internal logging (debug/warn/error spans)

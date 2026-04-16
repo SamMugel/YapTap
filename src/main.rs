@@ -197,9 +197,16 @@ fn main() -> Result<()> {
     // The WAV path isn't known until after stop_and_save(), so we share a
     // slot that gets filled once the file exists.
     let wav_for_sigint: Arc<Mutex<Option<PathBuf>>> = Arc::new(Mutex::new(None));
+    let llm_active_child: Arc<Mutex<Option<process::Child>>> = Arc::new(Mutex::new(None));
     {
         let wav_for_sigint = Arc::clone(&wav_for_sigint);
+        let llm_active_child = Arc::clone(&llm_active_child);
         ctrlc::set_handler(move || {
+            if let Ok(mut guard) = llm_active_child.lock() {
+                if let Some(ref mut child) = *guard {
+                    let _ = child.kill();
+                }
+            }
             if let Ok(guard) = wav_for_sigint.lock() {
                 if let Some(ref p) = *guard {
                     let _ = std::fs::remove_file(p);
@@ -284,7 +291,7 @@ fn main() -> Result<()> {
 
     tracing::debug!(path = ?wav_path, "WAV ready for transcription");
 
-    // ── 14. Transcribe ────────────────────────────────────────────────────────
+    // ── 8. Transcribe ─────────────────────────────────────────────────────────
     println!("Transcribing...");
 
     let whisper_model = args.model.as_deref().unwrap_or("base");
@@ -301,7 +308,7 @@ fn main() -> Result<()> {
     // Remove temp file regardless of outcome.
     let _ = std::fs::remove_file(&wav_path);
 
-    // ── 15. LLM pipeline (Phase 2) or print transcript (Phase 1) ─────────────
+    // ── 9. LLM pipeline (Phase 2) or print transcript (Phase 1) ─────────────
     if let Some(ref ppath) = prompt_path {
         println!("Thinking...");
 
@@ -335,8 +342,17 @@ fn main() -> Result<()> {
             })
         });
 
+        // Take stdout before storing child so we can stream independently
+        let llm_stdout = llm_child.stdout.take();
+
+        // Store child in shared slot so the SIGINT handler can kill it
+        {
+            let mut guard = llm_active_child.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = Some(llm_child);
+        }
+
         // Stream stdout to terminal
-        if let Some(mut stdout) = llm_child.stdout.take() {
+        if let Some(mut stdout) = llm_stdout {
             use std::io::Read;
             let mut buf = [0u8; 256];
             loop {
@@ -351,7 +367,21 @@ fn main() -> Result<()> {
             }
         }
 
-        let status = llm_child.wait().context("while waiting for llm.py")?;
+        let status = {
+            let mut guard = llm_active_child.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(ref mut c) = *guard {
+                c.wait().context("while waiting for llm.py")?
+            } else {
+                return Err(anyhow::anyhow!("LLM child was killed"));
+            }
+        };
+
+        // Clear the shared slot
+        {
+            let mut guard = llm_active_child.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = None;
+        }
+
         let stderr_output = stderr_handle
             .and_then(|h| h.join().ok())
             .unwrap_or_default();

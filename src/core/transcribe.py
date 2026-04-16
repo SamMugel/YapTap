@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Whisper-based audio transcription module.
 
@@ -33,7 +34,7 @@ def transcribe(wav_path: str, model_name: str = "base") -> str:
         raise ValueError(f"WAV file not found: {wav_path}")
 
     print(
-        f"Downloading Whisper {model_name} model — first use only (may take 1–3 minutes)…",
+        f"Loading Whisper {model_name} model…",
         file=sys.stderr,
     )
     try:
@@ -59,6 +60,7 @@ def main() -> None:
     #   - Exit 1 on any failure (prints "error: <msg>" to stderr)
     # Used by: Rust subprocess spawn
     # Safe to refactor: argument parsing details, but NOT the exit code contract
+    logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     parser = argparse.ArgumentParser(
         description="Transcribe a WAV file using Whisper."
     )

@@ -83,8 +83,7 @@ def stream_response(
 
 def main() -> None:
     """CLI entry point: read transcript from stdin, stream LLM response to stdout."""
-    transcript = sys.stdin.read()
-
+    logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
     parser = argparse.ArgumentParser(
         description="Stream an LLM response from ollama to stdout."
     )
@@ -99,6 +98,7 @@ def main() -> None:
         help="Ollama model name (default: llama3)",
     )
     args = parser.parse_args()
+    transcript = sys.stdin.read()
 
     try:
         for chunk in stream_response(transcript, args.prompt_file, args.model):

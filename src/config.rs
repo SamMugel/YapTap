@@ -2,10 +2,7 @@
 ///
 /// Owns `AppConfig` (persisted to `~/.config/yaptap/config.toml`) and the
 /// `prompts_dir()` helper that was previously inlined in `main.rs`.
-use std::{
-    io::ErrorKind,
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +26,20 @@ impl Default for AppConfig {
         }
     }
 }
+
+/// Hardcoded default config written on first launch — keeps user-helpful
+/// comments that `toml::to_string_pretty` would strip.
+/// Values must stay in sync with `AppConfig::default()`.
+const DEFAULT_CONFIG_TOML: &str = "\
+# YapTap configuration
+# hotkey: change via in-app dialog (takes effect immediately), or edit here and restart
+# whisper_model, llm_model: edit here and restart to apply
+
+hotkey = \"option+space\"    # global hotkey to start/stop recording
+selected_prompt = \"\"       # stem of selected prompt file; empty = No Prompt
+whisper_model = \"base\"     # Whisper model for transcription
+llm_model = \"llama3\"       # Ollama model for LLM inference
+";
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
@@ -147,22 +158,14 @@ impl AppConfig {
 
         // Write defaults if the file does not yet exist.
         if !path.exists() {
-            let default_cfg = AppConfig::default();
-            match toml::to_string_pretty(&default_cfg) {
-                Ok(contents) => {
-                    if let Err(e) = std::fs::write(&path, &contents) {
-                        tracing::warn!(
-                            path = %path.display(),
-                            error = %e,
-                            "could not write default config"
-                        );
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "could not serialise default config");
-                }
+            if let Err(e) = std::fs::write(&path, DEFAULT_CONFIG_TOML) {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "could not write default config"
+                );
             }
-            return (default_cfg, warnings);
+            return (AppConfig::default(), warnings);
         }
 
         // Read and parse.
@@ -225,126 +228,74 @@ impl AppConfig {
     }
 
     /// Atomically persist the config with `hotkey` set to `new_hotkey`.
-    ///
-    /// Follows the identical atomic write pattern as `save_prompt`: write to
-    /// `.tmp` then rename into place, with EXDEV fallback.
     pub fn save_hotkey(&self, new_hotkey: &str) -> anyhow::Result<()> {
         let mut updated = self.clone();
         updated.hotkey = new_hotkey.to_string();
-
-        let path = config_path();
-        let tmp_path = path.with_extension("toml.tmp");
-
-        let contents = match toml::to_string_pretty(&updated) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!(error = %e, "could not serialise config");
-                return Ok(());
-            }
-        };
-
-        if let Err(e) = std::fs::write(&tmp_path, &contents) {
-            tracing::warn!(
-                path = %tmp_path.display(),
-                error = %e,
-                "could not write config"
-            );
-            return Ok(());
-        }
-
-        if let Err(rename_err) = std::fs::rename(&tmp_path, &path) {
-            if rename_err.raw_os_error() == Some(libc_exdev()) {
-                if let Err(e) = std::fs::copy(&tmp_path, &path) {
-                    tracing::warn!(
-                        src = %tmp_path.display(),
-                        dst = %path.display(),
-                        error = %e,
-                        "could not copy config"
-                    );
-                    let _ = std::fs::remove_file(&tmp_path);
-                    return Ok(());
-                }
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                tracing::warn!(
-                    src = %tmp_path.display(),
-                    dst = %path.display(),
-                    error = %rename_err,
-                    "could not rename config"
-                );
-                let _ = std::fs::remove_file(&tmp_path);
-            }
-        }
-
-        Ok(())
+        save_config(&updated)
     }
 
     /// Atomically persist the config with `selected_prompt` set to `stem`.
-    ///
-    /// Writes to a `.tmp` sibling then renames into place.  Falls back to
-    /// copy+delete when the rename crosses a filesystem boundary (EXDEV).
-    /// Any I/O error is logged via tracing and swallowed so callers need not
-    /// handle it.
     pub fn save_prompt(&self, stem: &str) -> anyhow::Result<()> {
         let mut updated = self.clone();
         updated.selected_prompt = stem.to_string();
+        save_config(&updated)
+    }
+}
 
-        let path = config_path();
-        let tmp_path = path.with_extension("toml.tmp");
+/// Atomically write `updated` to the config file.
+///
+/// Writes to a `.tmp` sibling then renames into place.  Falls back to
+/// copy+delete when the rename crosses a filesystem boundary (EXDEV).
+/// Any I/O error is logged via tracing and swallowed so callers need not
+/// handle it.
+fn save_config(updated: &AppConfig) -> anyhow::Result<()> {
+    let path = config_path();
+    let tmp_path = path.with_extension("toml.tmp");
 
-        let contents = match toml::to_string_pretty(&updated) {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!(error = %e, "could not serialise config");
-                return Ok(());
-            }
-        };
-
-        if let Err(e) = std::fs::write(&tmp_path, &contents) {
-            tracing::warn!(
-                path = %tmp_path.display(),
-                error = %e,
-                "could not write config"
-            );
+    let contents = match toml::to_string_pretty(updated) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "could not serialise config");
             return Ok(());
         }
+    };
 
-        // Attempt atomic rename; fall back to copy+delete on EXDEV.
-        if let Err(rename_err) = std::fs::rename(&tmp_path, &path) {
-            if rename_err.raw_os_error() == Some(libc_exdev()) {
-                // Cross-device rename — copy then delete.
-                if let Err(e) = std::fs::copy(&tmp_path, &path) {
-                    tracing::warn!(
-                        src = %tmp_path.display(),
-                        dst = %path.display(),
-                        error = %e,
-                        "could not copy config"
-                    );
-                    let _ = std::fs::remove_file(&tmp_path);
-                    return Ok(());
-                }
-                let _ = std::fs::remove_file(&tmp_path);
-            } else if rename_err.kind() == ErrorKind::NotFound {
-                tracing::warn!(
-                    src = %tmp_path.display(),
-                    dst = %path.display(),
-                    error = %rename_err,
-                    "could not rename config"
-                );
-                let _ = std::fs::remove_file(&tmp_path);
-            } else {
-                tracing::warn!(
-                    src = %tmp_path.display(),
-                    dst = %path.display(),
-                    error = %rename_err,
-                    "could not rename config"
-                );
-                let _ = std::fs::remove_file(&tmp_path);
-            }
-        }
-
-        Ok(())
+    if let Err(e) = std::fs::write(&tmp_path, &contents) {
+        tracing::warn!(
+            path = %tmp_path.display(),
+            error = %e,
+            "could not write config"
+        );
+        return Ok(());
     }
+
+    // Attempt atomic rename; fall back to copy+delete on EXDEV.
+    if let Err(rename_err) = std::fs::rename(&tmp_path, &path) {
+        if rename_err.raw_os_error() == Some(libc_exdev()) {
+            // Cross-device rename — copy then delete.
+            if let Err(e) = std::fs::copy(&tmp_path, &path) {
+                tracing::warn!(
+                    src = %tmp_path.display(),
+                    dst = %path.display(),
+                    error = %e,
+                    "could not copy config"
+                );
+                let _ = std::fs::remove_file(&tmp_path);
+                return Ok(());
+            }
+            let _ = std::fs::remove_file(&tmp_path);
+        } else {
+            tracing::warn!(
+                src = %tmp_path.display(),
+                dst = %path.display(),
+                error = %rename_err,
+                "could not rename config"
+            );
+            let _ = std::fs::remove_file(&tmp_path);
+        }
+    }
+
+    Ok(())
 }
 
 // ── EXDEV constant (cross-device link error) ──────────────────────────────────

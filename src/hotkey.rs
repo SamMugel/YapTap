@@ -131,6 +131,17 @@ fn parse_key(tok: &str) -> Option<rdev::Key> {
             '7' => Some(rdev::Key::Num7),
             '8' => Some(rdev::Key::Num8),
             '9' => Some(rdev::Key::Num9),
+            ',' => Some(rdev::Key::Comma),
+            '.' => Some(rdev::Key::Dot),
+            '/' => Some(rdev::Key::Slash),
+            ';' => Some(rdev::Key::SemiColon),
+            '\'' => Some(rdev::Key::Quote),
+            '[' => Some(rdev::Key::LeftBracket),
+            ']' => Some(rdev::Key::RightBracket),
+            '\\' => Some(rdev::Key::BackSlash),
+            '-' => Some(rdev::Key::Minus),
+            '=' => Some(rdev::Key::Equal),
+            '`' => Some(rdev::Key::BackQuote),
             _ => None,
         };
     }
@@ -238,5 +249,71 @@ mod tests {
     fn test_arrow_keys() {
         let hk = parse_hotkey("option+left").unwrap();
         assert_eq!(hk.key, rdev::Key::LeftArrow);
+    }
+
+    #[test]
+    fn test_comma_key() {
+        let hk = parse_hotkey("option+,").unwrap();
+        assert_eq!(hk.key, rdev::Key::Comma);
+    }
+
+    #[test]
+    fn test_dot_key() {
+        let hk = parse_hotkey("cmd+.").unwrap();
+        assert_eq!(hk.key, rdev::Key::Dot);
+    }
+
+    #[test]
+    fn test_slash_key() {
+        let hk = parse_hotkey("cmd+/").unwrap();
+        assert_eq!(hk.key, rdev::Key::Slash);
+    }
+
+    #[test]
+    fn test_semicolon_key() {
+        let hk = parse_hotkey("option+;").unwrap();
+        assert_eq!(hk.key, rdev::Key::SemiColon);
+    }
+
+    #[test]
+    fn test_quote_key() {
+        let hk = parse_hotkey("cmd+'").unwrap();
+        assert_eq!(hk.key, rdev::Key::Quote);
+    }
+
+    #[test]
+    fn test_left_bracket_key() {
+        let hk = parse_hotkey("option+[").unwrap();
+        assert_eq!(hk.key, rdev::Key::LeftBracket);
+    }
+
+    #[test]
+    fn test_right_bracket_key() {
+        let hk = parse_hotkey("option+]").unwrap();
+        assert_eq!(hk.key, rdev::Key::RightBracket);
+    }
+
+    #[test]
+    fn test_backslash_key() {
+        let hk = parse_hotkey("cmd+\\").unwrap();
+        assert_eq!(hk.key, rdev::Key::BackSlash);
+    }
+
+    #[test]
+    fn test_minus_key() {
+        let hk = parse_hotkey("option+-").unwrap();
+        assert_eq!(hk.key, rdev::Key::Minus);
+    }
+
+    #[test]
+    fn test_equal_key() {
+        let hk = parse_hotkey("cmd+=").unwrap();
+        assert_eq!(hk.key, rdev::Key::Equal);
+    }
+
+    #[test]
+    fn test_backquote_key() {
+        let hk = parse_hotkey("option+`").unwrap();
+        assert_eq!(hk.key, rdev::Key::BackQuote);
     }
 }

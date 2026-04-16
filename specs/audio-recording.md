@@ -62,8 +62,7 @@ return temp file path to caller
 
 ## Temp File
 
-- Created with `tempfile::Builder` in the system temp directory.
-- Named `yaptap_<timestamp>.wav` for easier debugging.
+- Created via `std::env::temp_dir()` in the system temp directory, named `yaptap_<unix_timestamp>.wav`.
 - Deleted by the Rust process after the transcript has been printed (or on any error/signal).
 - On SIGINT the file is deleted in a `ctrlc` handler before exit.
 

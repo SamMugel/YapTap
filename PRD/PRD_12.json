@@ -7,72 +7,72 @@
       "id": "P12-T001",
       "section": "bugs",
       "title": "SIGINT in CLI mode does not kill `llm.py` subprocess",
-      "description": "specs/cli.md states: 'User sends SIGINT (Ctrl-C) during LLM streaming → Kill llm.py subprocess immediately, delete any temp WAV file, exit 130.'\n\nThe SIGINT handler in `src/main.rs` only stores the WAV path (via `wav_for_sigint: Arc<Mutex<Option<PathBuf>>>`). The `llm_child` process handle is a local variable and is never shared with the signal handler, so pressing Ctrl-C during LLM streaming exits the Rust process but leaves `llm.py` running as an orphan.\n\nFix: introduce a second shared slot `Arc<Mutex<Option<process::Child>>>` (analogous to `cli_active_child` used for transcription) and store `llm_child` in it before streaming. The SIGINT handler should call `.kill()` on any process stored in this slot before exiting 130.\n\nPattern is already established by `cli_active_child` in `transcription.rs` — apply the same pattern for the LLM child in `main.rs`.",
+      "description": "specs/cli.md states: 'User sends SIGINT (Ctrl-C) during LLM streaming \u2192 Kill llm.py subprocess immediately, delete any temp WAV file, exit 130.'\n\nThe SIGINT handler in `src/main.rs` only stores the WAV path (via `wav_for_sigint: Arc<Mutex<Option<PathBuf>>>`). The `llm_child` process handle is a local variable and is never shared with the signal handler, so pressing Ctrl-C during LLM streaming exits the Rust process but leaves `llm.py` running as an orphan.\n\nFix: introduce a second shared slot `Arc<Mutex<Option<process::Child>>>` (analogous to `cli_active_child` used for transcription) and store `llm_child` in it before streaming. The SIGINT handler should call `.kill()` on any process stored in this slot before exiting 130.\n\nPattern is already established by `cli_active_child` in `transcription.rs` \u2014 apply the same pattern for the LLM child in `main.rs`.",
       "checks": [
-        "While streaming LLM output in CLI mode, press Ctrl-C — `llm.py` process is no longer visible in `ps aux` after exit.",
+        "While streaming LLM output in CLI mode, press Ctrl-C \u2014 `llm.py` process is no longer visible in `ps aux` after exit.",
         "`cargo clippy -- -D warnings` clean.",
         "`cargo test` passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T002",
       "section": "bugs",
       "title": "`transcribe.py` always prints 'first use only' model download warning",
-      "description": "Every call to `transcribe()` in `src/core/transcribe.py` unconditionally prints:\n\n```\nDownloading Whisper {model_name} model — first use only (may take 1–3 minutes)…\n```\n\nThe message says 'first use only', but it appears on every transcription — even after the Whisper model is cached in `~/.cache/whisper/`. This is misleading.\n\nFix options (pick the simplest):\n1. Remove the print statement entirely — Whisper prints its own progress output when downloading; the Rust binary captures/ignores stderr in app mode anyway.\n2. Change wording to a neutral 'Loading Whisper {model_name} model…' (removes the misleading 'first use only' claim).\n\nOption 2 is preferred: it gives useful context during CLI use without making a false claim about frequency.",
+      "description": "Every call to `transcribe()` in `src/core/transcribe.py` unconditionally prints:\n\n```\nDownloading Whisper {model_name} model \u2014 first use only (may take 1\u20133 minutes)\u2026\n```\n\nThe message says 'first use only', but it appears on every transcription \u2014 even after the Whisper model is cached in `~/.cache/whisper/`. This is misleading.\n\nFix options (pick the simplest):\n1. Remove the print statement entirely \u2014 Whisper prints its own progress output when downloading; the Rust binary captures/ignores stderr in app mode anyway.\n2. Change wording to a neutral 'Loading Whisper {model_name} model\u2026' (removes the misleading 'first use only' claim).\n\nOption 2 is preferred: it gives useful context during CLI use without making a false claim about frequency.",
       "checks": [
-        "Run transcription twice with the same model — second run message does not say 'first use only'.",
+        "Run transcription twice with the same model \u2014 second run message does not say 'first use only'.",
         "python-style.mdc: file still passes Black formatting."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T003",
       "section": "bugs",
       "title": "`llm.py` reads stdin before parsing CLI args, blocking `--help`",
-      "description": "In `src/core/llm.py`, `main()` calls `sys.stdin.read()` as its first statement, before `argparse` parses `--prompt-file` or `--help`:\n\n```python\ndef main() -> None:\n    transcript = sys.stdin.read()   # ← blocks here, waiting for EOF\n    parser = argparse.ArgumentParser(...)\n    args = parser.parse_args()\n```\n\nRunning `python3 src/core/llm.py --help` hangs until the user presses Ctrl-D, because stdin.read() blocks waiting for EOF before argparse ever runs.\n\nspecs/llm.md shows the canonical order: parse args first, then read stdin.\n\nFix: move `transcript = sys.stdin.read()` to after `args = parser.parse_args()`, matching the spec and the pattern used in development/debugging.\n\nNote: this does not affect production usage (Rust writes the transcript then closes stdin before Python starts reading), but it matters for manual testing and `--help`.",
+      "description": "In `src/core/llm.py`, `main()` calls `sys.stdin.read()` as its first statement, before `argparse` parses `--prompt-file` or `--help`:\n\n```python\ndef main() -> None:\n    transcript = sys.stdin.read()   # \u2190 blocks here, waiting for EOF\n    parser = argparse.ArgumentParser(...)\n    args = parser.parse_args()\n```\n\nRunning `python3 src/core/llm.py --help` hangs until the user presses Ctrl-D, because stdin.read() blocks waiting for EOF before argparse ever runs.\n\nspecs/llm.md shows the canonical order: parse args first, then read stdin.\n\nFix: move `transcript = sys.stdin.read()` to after `args = parser.parse_args()`, matching the spec and the pattern used in development/debugging.\n\nNote: this does not affect production usage (Rust writes the transcript then closes stdin before Python starts reading), but it matters for manual testing and `--help`.",
       "checks": [
         "`python3 src/core/llm.py --help` prints help text immediately without waiting for Ctrl-D.",
         "All six `llm_test.py` tests still pass.",
         "python-style.mdc: file still passes Black formatting."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T004",
       "section": "code-quality",
       "title": "Step comment numbering in `main.rs` jumps from 7 to 14",
-      "description": "In `src/main.rs`, the step-comment sequence reads:\n\n```\n// ── 2. Start non-blocking audio capture\n// ── 3. Elapsed-time counter thread\n// ── 4. Block until user presses Enter\n// ── 5. Stop capture and encode WAV\n// ── 6. Validate python3\n// ── 7. Validate ffmpeg\n// ── 14. Transcribe          ← should be 8\n```\n\nSteps 8-13 were removed during an earlier refactor but the step number was not updated. Renumber `// ── 14. Transcribe` to `// ── 8. Transcribe`.",
+      "description": "In `src/main.rs`, the step-comment sequence reads:\n\n```\n// \u2500\u2500 2. Start non-blocking audio capture\n// \u2500\u2500 3. Elapsed-time counter thread\n// \u2500\u2500 4. Block until user presses Enter\n// \u2500\u2500 5. Stop capture and encode WAV\n// \u2500\u2500 6. Validate python3\n// \u2500\u2500 7. Validate ffmpeg\n// \u2500\u2500 14. Transcribe          \u2190 should be 8\n```\n\nSteps 8-13 were removed during an earlier refactor but the step number was not updated. Renumber `// \u2500\u2500 14. Transcribe` to `// \u2500\u2500 8. Transcribe`.\n\nNote: // \u2500\u2500 15. LLM pipeline was also renumbered to // \u2500\u2500 9. as part of this fix (the PRD only mentioned 14\u21928 but 15 was equally stale).",
       "checks": [
-        "`grep '// ── 14.' src/main.rs` produces no output.",
-        "`grep '// ── 8.' src/main.rs` matches the transcription step."
+        "`grep '// \u2500\u2500 14.' src/main.rs` produces no output.",
+        "`grep '// \u2500\u2500 8.' src/main.rs` matches the transcription step."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T005",
       "section": "code-quality",
       "title": "Remove unused `tempfile` crate from `Cargo.toml`",
-      "description": "`Cargo.toml` lists `tempfile = \"3\"` as a dependency. No Rust source file imports or uses it — confirmed by `grep -r 'use tempfile\\|tempfile::' src/*.rs` returning no matches.\n\n`audio.rs` constructs the temp WAV path via `std::env::temp_dir().join(format!(\"yaptap_{timestamp}.wav\"))` (stdlib only). The `tempfile` crate was originally required by the spec (`specs/audio-recording.md` says 'Created with `tempfile::Builder`') but the implementation diverged and uses stdlib instead.\n\nFix: remove `tempfile = \"3\"` from `[dependencies]` in `Cargo.toml`.\n\nNote: this also requires updating `specs/audio-recording.md` to remove the `tempfile::Builder` reference (covered by P12-T014).",
+      "description": "`Cargo.toml` lists `tempfile = \"3\"` as a dependency. No Rust source file imports or uses it \u2014 confirmed by `grep -r 'use tempfile\\|tempfile::' src/*.rs` returning no matches.\n\n`audio.rs` constructs the temp WAV path via `std::env::temp_dir().join(format!(\"yaptap_{timestamp}.wav\"))` (stdlib only). The `tempfile` crate was originally required by the spec (`specs/audio-recording.md` says 'Created with `tempfile::Builder`') but the implementation diverged and uses stdlib instead.\n\nFix: remove `tempfile = \"3\"` from `[dependencies]` in `Cargo.toml`.\n\nNote: this also requires updating `specs/audio-recording.md` to remove the `tempfile::Builder` reference (covered by P12-T014).",
       "checks": [
         "`cargo build` exits 0 after removal.",
         "`cargo clippy -- -D warnings` clean.",
         "`grep tempfile Cargo.toml` returns no matches."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T006",
       "section": "code-quality",
       "title": "Deduplicate `save_hotkey` and `save_prompt` in `config.rs`",
-      "description": "`save_hotkey()` and `save_prompt()` in `src/config.rs` are nearly identical — both:\n1. Clone `self`, set one field.\n2. Serialise with `toml::to_string_pretty`.\n3. Write to `.tmp` sibling.\n4. Rename with EXDEV fallback.\n5. Log warnings on each failure.\n\nThe only difference is which field they update. This violates the DRY principle and means any bug fix must be applied twice.\n\nFix: extract a private `save_config(updated: &AppConfig) -> anyhow::Result<()>` that contains the atomic-write logic. Both `save_hotkey` and `save_prompt` become one-line wrappers:\n\n```rust\npub fn save_hotkey(&self, new_hotkey: &str) -> anyhow::Result<()> {\n    let mut updated = self.clone();\n    updated.hotkey = new_hotkey.to_string();\n    save_config(&updated)\n}\n\npub fn save_prompt(&self, stem: &str) -> anyhow::Result<()> {\n    let mut updated = self.clone();\n    updated.selected_prompt = stem.to_string();\n    save_config(&updated)\n}\n```",
+      "description": "`save_hotkey()` and `save_prompt()` in `src/config.rs` are nearly identical \u2014 both:\n1. Clone `self`, set one field.\n2. Serialise with `toml::to_string_pretty`.\n3. Write to `.tmp` sibling.\n4. Rename with EXDEV fallback.\n5. Log warnings on each failure.\n\nThe only difference is which field they update. This violates the DRY principle and means any bug fix must be applied twice.\n\nFix: extract a private `save_config(updated: &AppConfig) -> anyhow::Result<()>` that contains the atomic-write logic. Both `save_hotkey` and `save_prompt` become one-line wrappers:\n\n```rust\npub fn save_hotkey(&self, new_hotkey: &str) -> anyhow::Result<()> {\n    let mut updated = self.clone();\n    updated.hotkey = new_hotkey.to_string();\n    save_config(&updated)\n}\n\npub fn save_prompt(&self, stem: &str) -> anyhow::Result<()> {\n    let mut updated = self.clone();\n    updated.selected_prompt = stem.to_string();\n    save_config(&updated)\n}\n```",
       "checks": [
         "`cargo build` exits 0.",
         "`cargo clippy -- -D warnings` clean.",
         "Atomic write path covered: prompt and hotkey saves still persist correctly on disk.",
         "The EXDEV fallback logic appears only once in `config.rs`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T007",
@@ -80,10 +80,10 @@
       "title": "Config file initial write missing user-helpful comment header",
       "description": "specs/config.md shows the config file with comments that explain each field:\n\n```toml\n# YapTap configuration\n# hotkey: change via in-app dialog (takes effect immediately), or edit here and restart\n# whisper_model, llm_model: edit here and restart to apply\n\nhotkey = \"option+space\"    # global hotkey to start/stop recording\nselected_prompt = \"\"       # stem of selected prompt file; empty = No Prompt\nwhisper_model = \"base\"     # Whisper model for transcription\nllm_model = \"llama3\"       # Ollama model for LLM inference\n```\n\n`config.rs` uses `toml::to_string_pretty(&default_cfg)` which produces bare key-value lines with no comments. New users who open the config file see no guidance.\n\nFix: replace the `toml::to_string_pretty` call in `AppConfig::load()` (the 'write defaults' branch) with a hardcoded string literal that matches the spec exactly. The literal should be maintained alongside the `AppConfig` struct definition.",
       "checks": [
-        "Delete `~/.config/yaptap/config.toml`, launch app, open `~/.config/yaptap/config.toml` — file contains the comment header.",
+        "Delete `~/.config/yaptap/config.toml`, launch app, open `~/.config/yaptap/config.toml` \u2014 file contains the comment header.",
         "`cargo build` exits 0; `cargo clippy -- -D warnings` clean."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T008",
@@ -94,18 +94,18 @@
         "`head -1 src/core/transcribe.py` prints `#!/usr/bin/env python3`.",
         "All `transcribe_test.py` tests still pass."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T009",
       "section": "spec-alignment",
       "title": "Add `logging.basicConfig` to `transcribe.py` `main()`",
-      "description": "specs/transcription.md shows `main()` calling `logging.basicConfig(level=logging.WARNING, stream=sys.stderr)` before any other logic. The actual `main()` in `src/core/transcribe.py` has no `logging.basicConfig` call.\n\nWithout this, the `log = logging.getLogger(__name__)` logger at module level produces no output even when warnings or errors are logged via `log.warning()` / `log.error()` — they are silently discarded by the root logger's default NullHandler.\n\nFix: add `logging.basicConfig(level=logging.WARNING, stream=sys.stderr)` as the first statement of `main()` in `transcribe.py`.",
+      "description": "specs/transcription.md shows `main()` calling `logging.basicConfig(level=logging.WARNING, stream=sys.stderr)` before any other logic. The actual `main()` in `src/core/transcribe.py` has no `logging.basicConfig` call.\n\nWithout this, the `log = logging.getLogger(__name__)` logger at module level produces no output even when warnings or errors are logged via `log.warning()` / `log.error()` \u2014 they are silently discarded by the root logger's default NullHandler.\n\nFix: add `logging.basicConfig(level=logging.WARNING, stream=sys.stderr)` as the first statement of `main()` in `transcribe.py`.",
       "checks": [
         "Running `transcribe.py` with `PYTHONPATH` and an invalid path produces log output on stderr.",
         "All `transcribe_test.py` tests still pass."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T010",
@@ -116,31 +116,31 @@
         "All six `llm_test.py` tests still pass.",
         "python-style.mdc: file passes Black formatting."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T011",
       "section": "spec-alignment",
-      "title": "Hotkey parser rejects punctuation/symbol keys — spec promises 'any printable character'",
-      "description": "specs/config.md states under 'Valid keys':\n> Any printable character — e.g. `a`, `1`, `,`, `/`\n\n`parse_key()` in `src/hotkey.rs` only handles:\n- Letters a–z (mapped to `rdev::Key::KeyA` … `rdev::Key::KeyZ`)\n- Digits 0–9 (mapped to `rdev::Key::Num0` … `rdev::Key::Num9`)\n- Named keys (space, tab, return, escape, delete, arrows, f1–f20)\n\nPunctuation keys such as `,`, `.`, `/`, `;`, `'`, `[`, `]`, `\\`, `-`, `=` are silently rejected and produce an 'unrecognised key' error. This breaks the spec promise.\n\nFix: add rdev key mappings for the full set of printable punctuation keys available on a standard US keyboard. Add them to `parse_key()` as additional single-character match arms, and add corresponding unit tests in `#[cfg(test)] mod tests`.\n\nPriority keys to add: `,` → `rdev::Key::Comma`, `.` → `rdev::Key::Dot`, `/` → `rdev::Key::Slash`, `;` → `rdev::Key::SemiColon`, `'` → `rdev::Key::Quote`, `[` → `rdev::Key::LeftBracket`, `]` → `rdev::Key::RightBracket`, `\\` → `rdev::Key::BackSlash`, `-` → `rdev::Key::Minus`, `=` → `rdev::Key::Equal`, `` ` `` → `rdev::Key::BackQuote`.",
+      "title": "Hotkey parser rejects punctuation/symbol keys \u2014 spec promises 'any printable character'",
+      "description": "specs/config.md states under 'Valid keys':\n> Any printable character \u2014 e.g. `a`, `1`, `,`, `/`\n\n`parse_key()` in `src/hotkey.rs` only handles:\n- Letters a\u2013z (mapped to `rdev::Key::KeyA` \u2026 `rdev::Key::KeyZ`)\n- Digits 0\u20139 (mapped to `rdev::Key::Num0` \u2026 `rdev::Key::Num9`)\n- Named keys (space, tab, return, escape, delete, arrows, f1\u2013f20)\n\nPunctuation keys such as `,`, `.`, `/`, `;`, `'`, `[`, `]`, `\\`, `-`, `=` are silently rejected and produce an 'unrecognised key' error. This breaks the spec promise.\n\nFix: add rdev key mappings for the full set of printable punctuation keys available on a standard US keyboard. Add them to `parse_key()` as additional single-character match arms, and add corresponding unit tests in `#[cfg(test)] mod tests`.\n\nPriority keys to add: `,` \u2192 `rdev::Key::Comma`, `.` \u2192 `rdev::Key::Dot`, `/` \u2192 `rdev::Key::Slash`, `;` \u2192 `rdev::Key::SemiColon`, `'` \u2192 `rdev::Key::Quote`, `[` \u2192 `rdev::Key::LeftBracket`, `]` \u2192 `rdev::Key::RightBracket`, `\\` \u2192 `rdev::Key::BackSlash`, `-` \u2192 `rdev::Key::Minus`, `=` \u2192 `rdev::Key::Equal`, `` ` `` \u2192 `rdev::Key::BackQuote`.",
       "checks": [
         "`parse_hotkey(\"option+,\")` returns `Ok(...)` with `key == rdev::Key::Comma`.",
         "`parse_hotkey(\"cmd+/\")` returns `Ok(...)` with `key == rdev::Key::Slash`.",
         "`cargo test` passes (new tests for each new key).",
         "`cargo clippy -- -D warnings` clean."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T012",
       "section": "spec-update",
       "title": "Update `specs/menubar.md` to document 'Start/Stop Recording' menu item",
-      "description": "The implementation (`src/app.rs`, `build_menu()`) includes a 'Start Recording' / 'Stop Recording' / 'Processing…' toggle as the first item in the dropdown menu — above the prompt list. This item was added in PRD_3 (P3-T076) but was never added to `specs/menubar.md`.\n\nThe current spec shows the menu as:\n```\n   Action Items\n✓  Email Reply\n   ...\n   ─────────────────────────\n   No Prompt\n   ...\n```\n\nThe actual menu is:\n```\n   Start Recording           ← not in spec\n   ─────────────────────────\n   Action Items\n✓  Email Reply\n   ...\n   ─────────────────────────\n   No Prompt\n   ...\n```\n\nUpdate the menu structure diagram in `specs/menubar.md` to include the toggle item and describe its behaviour: enabled in Idle (shows 'Start Recording') and Recording states (shows 'Stop Recording'), disabled and shows 'Processing…' during Processing state.",
+      "description": "The implementation (`src/app.rs`, `build_menu()`) includes a 'Start Recording' / 'Stop Recording' / 'Processing\u2026' toggle as the first item in the dropdown menu \u2014 above the prompt list. This item was added in PRD_3 (P3-T076) but was never added to `specs/menubar.md`.\n\nThe current spec shows the menu as:\n```\n   Action Items\n\u2713  Email Reply\n   ...\n   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   No Prompt\n   ...\n```\n\nThe actual menu is:\n```\n   Start Recording           \u2190 not in spec\n   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   Action Items\n\u2713  Email Reply\n   ...\n   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   No Prompt\n   ...\n```\n\nUpdate the menu structure diagram in `specs/menubar.md` to include the toggle item and describe its behaviour: enabled in Idle (shows 'Start Recording') and Recording states (shows 'Stop Recording'), disabled and shows 'Processing\u2026' during Processing state.",
       "checks": [
         "`specs/menubar.md` menu structure diagram includes the toggle row.",
         "Description of toggle item behaviour (enabled/disabled by state) is present."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T013",
@@ -151,7 +151,7 @@
         "`specs/packaging.md` pip install line includes `numpy<2` and `tomli`.",
         "Venv repair strategy is described."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T014",
@@ -162,27 +162,27 @@
         "`specs/packaging.md` `.PHONY` line includes `install`.",
         "Target summary table has an `install` row."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T015",
       "section": "spec-update",
-      "title": "Update `specs/architecture.md` and `specs/audio-recording.md` — `tempfile` crate is unused",
+      "title": "Update `specs/architecture.md` and `specs/audio-recording.md` \u2014 `tempfile` crate is unused",
       "description": "`specs/architecture.md` lists `tempfile` under 'Dependencies (phases 1 & 2) / Rust'. `specs/audio-recording.md` says 'Created with `tempfile::Builder` in the system temp directory.'\n\nAs established in P12-T005, the `tempfile` Rust crate is not imported or used in any `.rs` file. `audio.rs` uses `std::env::temp_dir().join(format!(\"yaptap_{timestamp}.wav\"))` instead.\n\nUpdate both specs:\n1. `specs/architecture.md`: remove `tempfile` from the Rust dependencies list.\n2. `specs/audio-recording.md`: replace 'Created with `tempfile::Builder` in the system temp directory' with 'Created via `std::env::temp_dir()` in the system temp directory, named `yaptap_<unix_timestamp>.wav`'.",
       "checks": [
         "`grep -r 'tempfile::Builder' specs/` returns no matches.",
         "`grep 'tempfile' specs/architecture.md` returns no matches."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P12-T016",
       "section": "known-limitation",
-      "title": "Menu bar icon invisible on dark menu bar — template image API not available in tray-icon 0.14",
+      "title": "Menu bar icon invisible on dark menu bar \u2014 template image API not available in tray-icon 0.14",
       "description": "specs/menubar.md requires the menu bar icon to be a 'macOS template image (monochrome; the system adapts it for light and dark menu bar themes automatically).'\n\ntray-icon 0.14 exposes no public API to mark `NSStatusItem`'s `NSImage` as a template image. The current icons are black-on-transparent PNGs and are invisible when the macOS menu bar is set to dark mode.\n\nThis is tracked in-code as `// FIXME(P5-I002)` in `src/app.rs`.\n\nOptions:\n1. **Upgrade tray-icon**: check if a newer version (0.15+) exposes `NSImage.setTemplate(true)`. If so, upgrade and call the API.\n2. **Direct NSStatusItem access via objc**: use `msg_send!` to reach the `NSStatusItem` and call `[[statusItem button] image] setTemplate:YES`. This is `unsafe` but straightforward.\n3. **Use inverted icon on dark mode**: detect `NSAppearance` and load a white-on-transparent icon variant.\n\nOption 2 is recommended as the lowest-effort correct solution. Option 1 should be checked first.\n\nThis task remains 'to do' until the template image is applied; the FIXME comment must be removed when resolved.",
       "checks": [
-        "Set macOS menu bar appearance to Dark — tray icon is visible.",
-        "Set macOS menu bar appearance to Light — tray icon is still visible.",
+        "Set macOS menu bar appearance to Dark \u2014 tray icon is visible.",
+        "Set macOS menu bar appearance to Light \u2014 tray icon is still visible.",
         "`// FIXME(P5-I002)` comment is removed from `src/app.rs`.",
         "`cargo build` exits 0; `cargo clippy -- -D warnings` clean."
       ],
@@ -197,7 +197,7 @@
         "`python -m unittest src.core.transcribe_test` exits 0.",
         "Each of the five test methods has a docstring with both 'What' and 'Why' explanations."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }

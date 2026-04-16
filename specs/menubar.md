@@ -70,6 +70,9 @@ On error the icon returns to Idle; an alert dialog surfaces the error message.
 Clicking the menu bar icon opens a dropdown:
 
 ```
+   Start Recording           ← toggles to Stop Recording while recording;
+                               shows Processing… (disabled) while transcribing/LLM
+   ─────────────────────────
    Action Items
 ✓  Email Reply
    Journal
@@ -83,6 +86,16 @@ Clicking the menu bar icon opens a dropdown:
    ─────────────────────────
    Quit YapTap
 ```
+
+The **Start / Stop Recording** toggle is the first item in the dropdown:
+
+| App state | Item label | Enabled |
+|---|---|---|
+| Idle | Start Recording | Yes |
+| Recording | Stop Recording | Yes |
+| Processing | Processing… | No (disabled) |
+
+Clicking **Start Recording** in Idle state begins a recording (equivalent to pressing the hotkey). Clicking **Stop Recording** in Recording state stops it. The item is disabled and shows **Processing…** while transcription or LLM inference is in progress.
 
 - Prompt entries are loaded from `config/prompts/` at launch and refreshed each time the menu is opened, sorted alphabetically by filename stem (matching `--list-prompts` output order).
 - The currently selected prompt has a checkmark (✓). Only one item is checked at a time.
