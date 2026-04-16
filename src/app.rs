@@ -729,6 +729,26 @@ pub fn run_app() {
                 .spawn();
         }
     } else {
+        // P4-I002: on macOS 14 (Sonoma)+, Input Monitoring is also required.
+        // CGEventTap starts without error but silently delivers no events when
+        // this permission is absent.
+        let im_trusted = crate::hotkey::input_monitoring_trusted();
+        tracing::info!(trusted = im_trusted, "input monitoring trust");
+        if !im_trusted {
+            let btn = show_alert(
+                "Input Monitoring Required",
+                "On macOS 14 (Sonoma) and later, YapTap also needs Input Monitoring access \
+                 so the global hotkey can receive keyboard events system-wide.\n\n\
+                 Open System Settings \u{2192} Privacy & Security \u{2192} Input Monitoring?\n\n\
+                 After granting permission, quit and relaunch YapTap.",
+                &["Open Settings", "Later"],
+            );
+            if btn == 0 {
+                let _ = std::process::Command::new("open")
+                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+                    .spawn();
+            }
+        }
         match crate::hotkey::parse_hotkey(&config.hotkey) {
             Ok(parsed) => {
                 // Store the actual parsed hotkey in shared state so the main
