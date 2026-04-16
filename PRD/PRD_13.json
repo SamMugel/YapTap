@@ -7,11 +7,14 @@
       "id": "P13-T001",
       "section": "python",
       "title": "Add `provider` parameter and CompactifAI branch to `stream_response()` in `llm.py`",
-      "description": "Extend `stream_response()` in `src/core/llm.py` to accept a `provider` argument and route to the appropriate client.\n\nChanges:\n1. Add `import os` and `import openai` at the top of the file (alongside the existing `import ollama`).\n2. Add `provider: str = \"ollama\"` as the last parameter of `stream_response()`.\n3. Wrap the existing ollama call in an `if provider == \"ollama\":` branch.\n4. Add an `elif provider == \"compactifai\":` branch:\n   - Read `api_key = os.environ.get(\"MULTIVERSE_IAM_API_KEY\")`.\n   - If `api_key` is falsy, raise `RuntimeError(\"MULTIVERSE_IAM_API_KEY environment variable not set\")`.\n   - Build client: `openai.OpenAI(base_url=\"https://api.compactif.ai/v1\", api_key=api_key)`.\n   - Call `client.chat.completions.create(model=model_name, messages=messages, stream=True)`.\n   - Yield `chunk.choices[0].delta.content or \"\"` for each chunk.\n   - Wrap in `try/except Exception as err: raise RuntimeError(f\"CompactifAI generation failed with model {model_name!r}\") from err`.\n5. Add an `else:` branch: `raise ValueError(f\"Unknown provider: {provider!r}. Must be 'ollama' or 'compactifai'.\")`.\n6. Update the function docstring to document the new `provider` parameter and new `ValueError`/`RuntimeError` cases.",
+      "description": "Extend `stream_response()` in `src/core/llm.py` to accept a `provider` argument and route to the appropriate client.\n\nChanges:\n1. Add `import os` and `import openai` to the third-party imports block (alongside the existing `import ollama`). Import ordering: stdlib (`os`) before third-party (`ollama`, `openai`) per python-imports.mdc.\n2. Add `provider: str = \"ollama\"` as the last parameter of `stream_response()`.\n3. Wrap the existing ollama call in an `if provider == \"ollama\":` branch.\n4. Add an `elif provider == \"compactifai\":` branch:\n   - Read `api_key = os.environ.get(\"MULTIVERSE_IAM_API_KEY\")`.\n   - If `api_key` is falsy, raise `RuntimeError(\"MULTIVERSE_IAM_API_KEY environment variable not set\")`.\n   - Add `logger.debug(\"Calling CompactifAI\", extra={\"model\": model_name})` (matches the existing ollama debug call pattern; structured fields per python-logging.mdc).\n   - Build client: `openai.OpenAI(base_url=\"https://api.compactif.ai/v1\", api_key=api_key)`.\n   - Call `client.chat.completions.create(model=model_name, messages=messages, stream=True)`.\n   - Yield `chunk.choices[0].delta.content or \"\"` for each chunk.\n   - Catch `openai.OpenAIError` (not bare `Exception`) per python-errors.mdc ('catch the narrowest exception type possible'): `except openai.OpenAIError as err: raise RuntimeError(f\"CompactifAI generation failed with model {model_name!r}\") from err`.\n5. Add an `else:` branch: `raise ValueError(f\"Unknown provider: {provider!r}. Must be 'ollama' or 'compactifai'.\")`.\n6. Update the function docstring: add `provider` to Args, add `ValueError` for unknown provider to Raises.\n7. Update the INTENT comment above `stream_response()` (python-ai-intent-comments.mdc: 'update the comment whenever the behaviour it describes changes'):\n   - Purpose: now routes to ollama or CompactifAI based on `provider`.\n   - Invariants: add `When provider == 'compactifai', MULTIVERSE_IAM_API_KEY must be set in the environment.`\n   - Safe to refactor: callers now also depend on the `provider` parameter contract.\n8. Update the module-level docstring (first string in the file) to mention both providers: e.g. `'LLM entry point invoked as a subprocess by the Rust binary. Supports ollama (local) and CompactifAI (cloud) providers.'`",
       "checks": [
         "`grep 'import openai' src/core/llm.py` returns a match.",
         "`grep 'import os' src/core/llm.py` returns a match.",
         "`grep 'elif provider' src/core/llm.py` returns a match.",
+        "`grep 'openai.OpenAIError' src/core/llm.py` returns a match (not bare `Exception`).",
+        "`grep 'Calling CompactifAI' src/core/llm.py` returns a match.",
+        "`grep 'INTENT' src/core/llm.py` still present and updated to mention provider routing.",
         "`python -m unittest src.core.llm_test` passes (existing 6 tests).",
         "python Black formatting passes on `src/core/llm.py`."
       ],
@@ -92,11 +95,13 @@
       "id": "P13-T008",
       "section": "rust",
       "title": "Add `provider` and `api_key` params to `run_llm_collect()` in `src/llm.rs`; pass `--provider` and inject env",
-      "description": "Extend `run_llm_collect()` in `src/llm.rs` to accept a provider string and an optional API key.\n\nNew signature:\n```rust\npub fn run_llm_collect(\n    transcript: &str,\n    prompt_path: &Path,\n    model: &str,\n    provider: &str,\n    api_key: Option<&str>,\n    active_child: &Arc<Mutex<Option<Child>>>,\n) -> Result<String>\n```\n\nIn the command builder block, after `.args([\"--model\", model])`, add:\n```rust\n.args([\"--provider\", provider])\n```\n\nAfter the existing `.env(\"PATH\", ...)` call, add:\n```rust\nif let Some(key) = api_key {\n    cmd.env(\"MULTIVERSE_IAM_API_KEY\", key);\n}\n```\n\nAll callers of `run_llm_collect` must be updated to pass the new arguments (see P13-T013 for `app.rs`).",
+      "description": "Extend `run_llm_collect()` in `src/llm.rs` to accept a provider string and an optional API key.\n\nNew signature:\n```rust\npub fn run_llm_collect(\n    transcript: &str,\n    prompt_path: &Path,\n    model: &str,\n    provider: &str,\n    api_key: Option<&str>,\n    active_child: &Arc<Mutex<Option<Child>>>,\n) -> Result<String>\n```\n\nIn the command builder block, after `.args([\"--model\", model])`, add:\n```rust\n.args([\"--provider\", provider])\n```\n\nAfter the existing `.env(\"PATH\", ...)` call, add:\n```rust\nif let Some(key) = api_key {\n    cmd.env(\"MULTIVERSE_IAM_API_KEY\", key);\n}\n```\n\nAdd a `tracing::debug!` call with structured fields immediately before spawning (rust-tracing.mdc: 'Always log structured key-value fields'):\n```rust\ntracing::debug!(provider = %provider, has_api_key = api_key.is_some(), model = %model, \"spawning llm.py\");\n```\n\nUpdate the `/// # Contract` doc comment to document the new `provider` and `api_key` parameters.\n\nAll callers of `run_llm_collect` must be updated to pass the new arguments (see P13-T013 for `app.rs`).",
       "checks": [
         "`cargo build` exits 0.",
         "`cargo clippy -- -D warnings` clean.",
-        "`grep 'provider' src/llm.rs` returns matches in the signature and command builder."
+        "`cargo test` passes.",
+        "`grep 'provider' src/llm.rs` returns matches in the signature, command builder, and tracing call.",
+        "`grep 'has_api_key' src/llm.rs` returns a match."
       ],
       "status": "to do"
     },
@@ -104,11 +109,13 @@
       "id": "P13-T009",
       "section": "rust",
       "title": "Add `--llm-provider` CLI flag to `src/main.rs` and pass `--provider` to `llm.py` inline spawn",
-      "description": "Two changes in `src/main.rs`:\n\n1. Add `--llm-provider` to the CLI arg struct (alongside the existing `llm_model: Option<String>`):\n   ```rust\n   llm_provider: Option<String>,\n   ```\n   Validate accepted values: if the parsed value is not `\"ollama\"` or `\"compactifai\"`, print `error: unknown llm-provider '<value>' — must be 'ollama' or 'compactifai'` to stderr and exit 1.\n\n2. Resolve effective provider (CLI flag overrides config):\n   ```rust\n   let provider = args.llm_provider\n       .as_deref()\n       .unwrap_or(&config.llm_provider);\n   ```\n\n3. In the inline `llm.py` spawn block (currently at line ~318), add `--provider` after `--model`:\n   ```rust\n   .args([\"--model\", llm_model])\n   .args([\"--provider\", provider])\n   ```\n\n4. Update the `--llm-model` help text to `\"Override the LLM model name for the active provider (default: llama3)\"`.",
+      "description": "Changes in `src/main.rs`:\n\n1. Add `--llm-provider` to the CLI arg struct (alongside the existing `llm_model: Option<String>`):\n   ```rust\n   llm_provider: Option<String>,\n   ```\n   Validate accepted values: if the parsed value is not `\"ollama\"` or `\"compactifai\"`, print `error: unknown llm-provider '<value>' — must be 'ollama' or 'compactifai'` to stderr and exit 1.\n\n2. Resolve effective provider (CLI flag overrides config):\n   ```rust\n   let provider = args.llm_provider\n       .as_deref()\n       .unwrap_or(&config.llm_provider);\n   ```\n   Add `tracing::debug!(provider = %provider, \"resolved LLM provider\")` immediately after resolution (rust-tracing.mdc: structured fields).\n\n3. In the inline `llm.py` spawn block (currently at line ~318), add `--provider` after `--model`:\n   ```rust\n   .args([\"--model\", llm_model])\n   .args([\"--provider\", provider])\n   ```\n\n4. Update the `--llm-model` help text to `\"Override the LLM model name for the active provider (default: llama3)\"`.",
       "checks": [
         "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
         "`yaptap --llm-provider unknown` prints the expected error and exits 1.",
-        "`grep '\\-\\-provider' src/main.rs` shows the arg is passed to the subprocess."
+        "`grep '\\-\\-provider' src/main.rs` shows the arg is passed to the subprocess.",
+        "`grep 'resolved LLM provider' src/main.rs` returns a match."
       ],
       "status": "to do"
     },
@@ -116,12 +123,14 @@
       "id": "P13-T010",
       "section": "rust",
       "title": "Implement CLI API key prompt in `src/main.rs`",
-      "description": "Before the inline `llm.py` spawn in `src/main.rs`, when `provider == \"compactifai\"`:\n\n1. Check `std::env::var(\"MULTIVERSE_IAM_API_KEY\")` — if `Ok(key)` and non-empty, store `key` and proceed to spawn.\n2. If missing or empty, prompt on stdout:\n   ```\n   CompactifAI API key not found.\n   Enter your MULTIVERSE_IAM_API_KEY: \n   ```\n   Read from stdin (trim whitespace). If empty, print `error: API key must not be empty` to stderr and exit 1.\n3. Append `\\nexport MULTIVERSE_IAM_API_KEY=\"<key>\"\\n` to `~/.zshrc` (create file if absent; append-open so existing content is preserved).\n4. Print to stdout: `Key saved to ~/.zshrc. Run 'source ~/.zshrc' or open a new terminal to apply globally.`\n5. Inject key into the subprocess command via `.env(\"MULTIVERSE_IAM_API_KEY\", &key)` on the `Command` before spawning.\n\nThis path is only reached when `provider == \"compactifai\"` and the env var is absent.",
+      "description": "Before the inline `llm.py` spawn in `src/main.rs`, when `provider == \"compactifai\"`:\n\n1. Check `std::env::var(\"MULTIVERSE_IAM_API_KEY\")` — if `Ok(key)` and non-empty, add `tracing::debug!(source = \"env\", \"MULTIVERSE_IAM_API_KEY resolved\")` and store `key`.\n2. If missing or empty, prompt on stdout:\n   ```\n   CompactifAI API key not found.\n   Enter your MULTIVERSE_IAM_API_KEY: \n   ```\n   Read from stdin (trim whitespace). If empty, print `error: API key must not be empty` to stderr and exit 1.\n3. Append `\\nexport MULTIVERSE_IAM_API_KEY=\"<key>\"\\n` to `~/.zshrc` (create file if absent; append-open to preserve existing content). If the file write fails (permissions, etc.), log `tracing::warn!(\"failed to save API key to ~/.zshrc — key available for this session only\")` and continue; do not exit.\n4. Print to stdout: `Key saved to ~/.zshrc. Run 'source ~/.zshrc' or open a new terminal to apply globally.`\n5. Inject key into the subprocess command via `.env(\"MULTIVERSE_IAM_API_KEY\", &key)` on the `Command` before spawning.\n\nThis path is only reached when `provider == \"compactifai\"` and the env var is absent.",
       "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
         "Unset `MULTIVERSE_IAM_API_KEY`, run `yaptap --llm-provider compactifai --prompt email-reply` — CLI prompts for key, appends to `~/.zshrc`, proceeds to spawn.",
         "`grep MULTIVERSE_IAM_API_KEY ~/.zshrc` shows the export line after the above.",
         "With `MULTIVERSE_IAM_API_KEY` set in env, the prompt does not appear.",
-        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean."
+        "`grep 'source = ' src/main.rs` shows the structured tracing call."
       ],
       "status": "to do"
     },
@@ -140,10 +149,14 @@
       "id": "P13-T012",
       "section": "rust",
       "title": "Add Keychain read/write helpers for `MULTIVERSE_IAM_API_KEY` (new module `src/keychain.rs`)",
-      "description": "Create `src/keychain.rs` with two public functions:\n\n```rust\n/// Reads MULTIVERSE_IAM_API_KEY from the macOS Keychain.\n/// Service: \"yaptap\", Account: \"MULTIVERSE_IAM_API_KEY\".\n/// Returns None if the item does not exist.\npub fn keychain_get_api_key() -> Option<String>\n\n/// Writes MULTIVERSE_IAM_API_KEY to the macOS Keychain.\n/// Creates the item if absent; updates it if present.\npub fn keychain_set_api_key(key: &str) -> anyhow::Result<()>\n```\n\nUse `security_framework::passwords::{get_generic_password, set_generic_password}` (service: `\"yaptap\"`, account: `\"MULTIVERSE_IAM_API_KEY\"`).\n\nRegister the module in `src/main.rs` or `src/lib.rs` as `mod keychain;`.\n\nBoth functions should be free of `unsafe` (the `security-framework` crate wraps the C API safely).",
+      "description": "Create `src/keychain.rs` with a module-level `//!` doc comment and two crate-private functions (rust-modules.mdc: 'default to minimum visibility'):\n\n```rust\n//! macOS Keychain helpers for storing the CompactifAI API key.\n\n/// Reads `MULTIVERSE_IAM_API_KEY` from the macOS Keychain.\n///\n/// Service: `\"yaptap\"`, Account: `\"MULTIVERSE_IAM_API_KEY\"`.\n/// Returns `None` if the item does not exist.\npub(crate) fn keychain_get_api_key() -> Option<String>\n\n/// Writes `MULTIVERSE_IAM_API_KEY` to the macOS Keychain.\n///\n/// Creates the item if absent; updates it if already present.\n///\n/// # Errors\n/// Returns an error if the Keychain operation fails (e.g. user denied access,\n/// Keychain locked, or `security-framework` internal error).\npub(crate) fn keychain_set_api_key(key: &str) -> anyhow::Result<()>\n```\n\nUse `security_framework::passwords::{get_generic_password, set_generic_password}` (service: `\"yaptap\"`, account: `\"MULTIVERSE_IAM_API_KEY\"`).\n\nBoth functions must be `unsafe`-free (the `security-framework` crate wraps the C API safely).\n\nRegister the module in `src/main.rs` as `mod keychain;`.\n\nAdd a `#[cfg(test)] mod tests` block at the bottom of `src/keychain.rs` with a round-trip test (rust-testing.mdc: 'unit tests live in a `#[cfg(test)] mod tests` block'). The test should call `keychain_set_api_key` then `keychain_get_api_key` and assert the stored value matches. Mark it `#[ignore]` with a comment explaining it requires a real Keychain (cannot run in CI without macOS Keychain access).",
       "checks": [
         "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
-        "`keychain_set_api_key(\"test-key\")` followed by `keychain_get_api_key()` returns `Some(\"test-key\")` in a manual test or integration check.",
+        "`cargo test` passes (the round-trip test is `#[ignore]` so it does not block CI).",
+        "`grep 'pub(crate)' src/keychain.rs` returns matches for both functions.",
+        "`grep '//!' src/keychain.rs` returns the module doc comment.",
+        "`grep '# Errors' src/keychain.rs` returns a match on `keychain_set_api_key`.",
+        "`grep 'cfg(test)' src/keychain.rs` returns a match.",
         "`grep 'mod keychain' src/main.rs` returns a match."
       ],
       "status": "to do"
@@ -155,6 +168,7 @@
       "description": "In `src/app.rs`, before the `run_llm_collect()` call (currently at line ~627), add provider-aware API key resolution:\n\n1. Read effective provider from `config.llm_provider`.\n2. If provider is `\"compactifai\"`:\n   a. Check `std::env::var(\"MULTIVERSE_IAM_API_KEY\")` — if set and non-empty, use it.\n   b. Else check `crate::keychain::keychain_get_api_key()` — if `Some(key)`, use it.\n   c. Else show a macOS dialog (using `tray_icon` or `objc`/`NSAlert` directly):\n      - Title: `\"CompactifAI API Key Required\"`\n      - Message: `\"YapTap needs your CompactifAI API key to use the CompactifAI provider.\"`\n      - Secure text field for entry.\n      - Buttons: **Save** and **Cancel**.\n   d. On **Cancel**: show an alert `\"CompactifAI provider requires an API key. Recording cancelled.\"`, transition state machine back to Idle, return early.\n   e. On **Save** with non-empty input: call `crate::keychain::keychain_set_api_key(&input)`, use `input` as the key.\n   f. On **Save** with empty input: treat as Cancel.\n3. Update the `run_llm_collect()` call to pass the new `provider` and `api_key` arguments:\n   ```rust\n   crate::llm::run_llm_collect(\n       &transcript,\n       &prompt_path,\n       &config.llm_model,\n       &config.llm_provider,\n       api_key.as_deref(),\n       &shared.child,\n   )\n   ```",
       "checks": [
         "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
         "With `compactifai` provider and key in Keychain: hotkey → speak → result on clipboard (no dialog shown).",
         "With `compactifai` provider and no key anywhere: dialog appears; Cancel returns to Idle; Save stores in Keychain and proceeds.",
         "With `ollama` provider: no key resolution logic runs, existing behaviour unchanged."
@@ -192,8 +206,21 @@
       "description": "In `try_pip_repair()` (currently at line ~257 in `src/app.rs`), update the pip install args to include `openai`.\n\nCurrent:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"tomli\"])\n```\n\nReplace with:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\", \"openai\", \"tomli\"])\n```\n\nInstalling the full package list (rather than just the historically missing ones) ensures repair is idempotent and covers any missing package, not just those known at the time of writing.",
       "checks": [
         "`cargo build` exits 0.",
-        "With `openai` absent from venv: launch app — `try_pip_repair()` runs, `pip show openai` shows a version after launch.",
-        "`cargo clippy -- -D warnings` clean."
+        "`cargo clippy -- -D warnings` clean.",
+        "With `openai` absent from venv: launch app — `try_pip_repair()` runs, `pip show openai` shows a version after launch."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P13-T017",
+      "section": "config",
+      "title": "Validate `llm_provider` value in `AppConfig::load()` in `src/config.rs`",
+      "description": "After parsing the config TOML in `AppConfig::load()`, validate that `llm_provider` is one of the accepted values. If it is not `\"ollama\"` or `\"compactifai\"`, fall back to `\"ollama\"` and surface an alert.\n\nThis matches the error case in specs/config.md: \"Unknown llm_provider '<value>' — using default: ollama.\"\n\nIn the same block where unknown `hotkey` values are handled, add:\n```rust\nif cfg.llm_provider != \"ollama\" && cfg.llm_provider != \"compactifai\" {\n    let bad = cfg.llm_provider.clone();\n    tracing::warn!(value = %bad, \"unknown llm_provider — using default: ollama\");\n    cfg.llm_provider = \"ollama\".to_string();\n    // Surface alert in menu-bar mode; in CLI mode the tracing warn is sufficient.\n    show_alert(\n        \"Unknown LLM provider\",\n        &format!(\"Unknown llm_provider '{bad}' — using default: ollama.\"),\n    );\n}\n```\n\nNote: `show_alert()` is already used for the unknown-hotkey case in `config.rs`. Follow the same call pattern.",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
+        "Set `llm_provider = \"badvalue\"` in `~/.config/yaptap/config.toml`, launch app — alert appears with the expected message and `config.llm_provider` is `\"ollama\"` in memory.",
+        "`grep 'unknown llm_provider' src/config.rs` returns a match."
       ],
       "status": "to do"
     }
