@@ -28,7 +28,7 @@
         "If absent: grant it and restart the app.",
         "As a long-term fix, add a runtime check alongside the Accessibility check: query the TCC database or test for a synthetic event and emit a show_alert() if Input Monitoring appears absent."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P4-I003",
