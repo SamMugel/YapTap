@@ -46,7 +46,9 @@
       "Bash(cp ~/.config/yaptap/config.toml ~/.config/yaptap/config.toml.bak)",
       "Bash(cp /tmp/yaptap_test_config.toml ~/.config/yaptap/config.toml)",
       "Bash(cp ~/.config/yaptap/config.toml.bak ~/.config/yaptap/config.toml)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(mkdir -p ~/.claude/plugins/cache/local/presales-skills/1.2.2)",
+      "Bash(cp -r /tmp/presales-skills-install/presales-skills/. ~/.claude/plugins/cache/local/presales-skills/1.2.2/)"
     ]
   }
 }

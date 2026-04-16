@@ -1,0 +1,34 @@
+Read rules/ and specs/
+
+You are building PRD_8.json. This adds to phase 3 by packaging the app. IMPORTANT: DON'T BUILD PHASE 4 TASKS.
+
+read PRD/ carefully. Don't create overlapping tasks.
+
+each task needs an implementation status field: "done" or "to do"  
+
+Make tasks atomic.
+
+----
+
+Read PRD_8.json
+
+is anything missing? Think carefully. Can tasks be made more atomic? Implement recommendations
+
+----
+
+reread phase 3 specs carefully. focus PRD_8.json on building the phase 3 MVP. remove all future coding tasks.
+
+----
+
+review src/
+
+remove all tasks from PRD_8.json which have already been done
+
+The works in phase 3 needs to build on top of previously built code
+
+----
+
+Read PRD_8.json
+
+order tasks. Add dependencies and architectural choices first
+

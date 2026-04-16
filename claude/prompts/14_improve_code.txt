@@ -1,0 +1,7 @@
+review specs/ 
+read claude/rules/                                                       
+review src/                                                              
+ensure that code and features well aligned with vision from specs        
+note any inconsistencies or bugs                                         
+definition of done: add all necessary improvements to PRD/PRD_12.json    
+make tasks atomic. include a status: "done" / "to do" field.     

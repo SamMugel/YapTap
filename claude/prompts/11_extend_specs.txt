@@ -1,0 +1,24 @@
+1. study SPECS.md and specs/* to learn about the app specifications                             
+2. study claude/rules/*
+
+You are going to extend the specs out for phase 3
+
+package yaptap as an app. compile to a .dmg volume to intall it
+
+modify specs to specify this
+Ask any clarying questions needed
+
+---
+
+1. First-launch setup
+2. download on first launch
+3. Simply fail gracefully
+4. Private
+5. makefile
+6. use icon from menu
+
+---
+
+review specs/
+are there any inconsistencies? what about repetitions?
+think carefully
