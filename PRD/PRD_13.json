@@ -18,7 +18,7 @@
         "`python -m unittest src.core.llm_test` passes (existing 6 tests).",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T002",
@@ -30,7 +30,7 @@
         "`python -m unittest src.core.llm_test` passes.",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T003",
@@ -42,7 +42,7 @@
         "Test asserts `ollama.chat` was not called.",
         "python Black formatting passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T004",
@@ -53,7 +53,7 @@
         "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_compactifai_raises_on_missing_api_key` passes.",
         "python Black formatting passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T005",
@@ -64,7 +64,7 @@
         "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_compactifai_raises_on_api_failure` passes.",
         "python Black formatting passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T006",
@@ -76,7 +76,7 @@
         "python Black formatting passes.",
         "`python -m unittest src.core.llm_test` runs all 10 tests and passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T007",
@@ -89,7 +89,7 @@
         "Delete `~/.config/yaptap/config.toml`, launch app, open file — contains `llm_provider = \"ollama\"`.",
         "`grep 'llm_provider' src/config.rs` returns matches in both the struct and the literal."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T008",
@@ -103,7 +103,7 @@
         "`grep 'provider' src/llm.rs` returns matches in the signature, command builder, and tracing call.",
         "`grep 'has_api_key' src/llm.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T009",
@@ -117,7 +117,7 @@
         "`grep '\\-\\-provider' src/main.rs` shows the arg is passed to the subprocess.",
         "`grep 'resolved LLM provider' src/main.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T010",
@@ -132,7 +132,7 @@
         "With `MULTIVERSE_IAM_API_KEY` set in env, the prompt does not appear.",
         "`grep 'source = ' src/main.rs` shows the structured tracing call."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T011",
@@ -143,7 +143,7 @@
         "`cargo build` exits 0.",
         "`grep security-framework Cargo.toml` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T012",
@@ -159,7 +159,7 @@
         "`grep 'cfg(test)' src/keychain.rs` returns a match.",
         "`grep 'mod keychain' src/main.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T013",
@@ -173,7 +173,7 @@
         "With `compactifai` provider and no key anywhere: dialog appears; Cancel returns to Idle; Save stores in Keychain and proceeds.",
         "With `ollama` provider: no key resolution logic runs, existing behaviour unchanged."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T014",
@@ -184,7 +184,7 @@
         "`cargo build` exits 0.",
         "Remove `~/.config/yaptap/.venv/`, trigger first-launch setup, confirm `pip show openai` in the new venv shows a version."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T015",
@@ -197,7 +197,7 @@
         "With `openai` installed: `venv_healthy()` returns `true`.",
         "`cargo clippy -- -D warnings` clean."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T016",
@@ -209,7 +209,7 @@
         "`cargo clippy -- -D warnings` clean.",
         "With `openai` absent from venv: launch app — `try_pip_repair()` runs, `pip show openai` shows a version after launch."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P13-T017",
@@ -222,7 +222,7 @@
         "Set `llm_provider = \"badvalue\"` in `~/.config/yaptap/config.toml`, launch app — alert appears with the expected message and `config.llm_provider` is `\"ollama\"` in memory.",
         "`grep 'unknown llm_provider' src/config.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }
