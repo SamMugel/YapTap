@@ -1,68 +1,95 @@
 {
   "phase": 11,
   "phase_name": "Fix: tomli missing from venv — LLM step fails with ModuleNotFoundError",
-  "goal": "llm.py tries `import tomllib` (Python 3.11+ stdlib) and falls back to `import tomli as tomllib` (third-party). The venv runs Python 3.9.6 (Xcode), so tomllib is absent from the stdlib. tomli was never added to the pip install in run_setup_commands(), so neither import succeeds and the LLM step fails immediately. Fix: (1) add tomli to the pip install so new venvs include it; (2) add venv_tomli_ok() health check; (3) extend the existing venv-repair gate in run_app() to also trigger on missing tomli.",
+  "goal": "llm.py tries `import tomllib` (Python 3.11+ stdlib) and falls back to `import tomli as tomllib` (third-party). The venv runs Python 3.9.6 (Xcode), so tomllib is absent from the stdlib. tomli was never added to the pip install in run_setup_commands(), so neither import succeeds and the LLM step fails immediately. Fix: (1) add tomli to the pip install so new venvs include it; (2) replace venv_numpy_ok() with venv_healthy() that checks both numpy<2 AND tomli in a single subprocess; (3) replace the blunt teardown gate with a two-stage repair: try pip install in-place first, full teardown only on pip failure; (4) add a Makefile install target so the fixed binary can be deployed to /Applications/ without manual copying.",
   "root_cause": "run_setup_commands() installs 'numpy<2 openai-whisper ollama' but not 'tomli'. llm.py's module-level import of tomli fails at process start, before any LLM call is made, producing ModuleNotFoundError propagated to the user as 'LLM generation failed'.",
   "tasks": [
     {
       "id": "P11-T001",
       "section": "pip-add",
       "title": "Add `\"tomli\"` to pip install args in `run_setup_commands()` (`src/app.rs`)",
-      "description": "One-arg change: append `\"tomli\"` to the pip install args so every new venv includes it.\n\nCurrent:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\"])\n```\n\nReplace with:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\", \"tomli\"])\n```",
+      "description": "One-arg change: append `\"tomli\"` to the pip install args so every new venv includes it.\n\nCurrent (line ~217):\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\"])\n```\n\nReplace with:\n```rust\n.args([\"install\", \"--quiet\", \"numpy<2\", \"openai-whisper\", \"ollama\", \"tomli\"])\n```",
       "checks": [
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
         "Remove `~/.config/yaptap/.venv/`; trigger first-launch setup; confirm `pip show tomli` in the new venv shows a version."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P11-T002",
-      "section": "venv-repair",
-      "title": "Add `fn venv_tomli_ok() -> bool` to `src/app.rs`",
-      "description": "Mirror the pattern of `venv_numpy_ok()`. Returns false when the venv exists but the correct TOML module is missing.\n\nPlace immediately before `venv_numpy_ok()`:\n\n```rust\n/// Returns false when the venv exists but the TOML import module is unavailable.\n/// tomllib is stdlib on Python>=3.11; tomli must be pip-installed on older Python.\n/// Returns true when the venv is absent or the import succeeds.\nfn venv_tomli_ok() -> bool {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_default()\n        .join(\".config/yaptap/.venv/bin/python\");\n    if !venv_python.is_file() {\n        return true;\n    }\n    std::process::Command::new(&venv_python)\n        .args([\"-c\",\n            \"import sys; \\\nm='tomllib' if sys.version_info>=(3,11) else 'tomli'; \\\n__import__(m)\"])\n        .env(\"PATH\", crate::config::brew_augmented_path())\n        .output()\n        .map(|o| o.status.success())\n        .unwrap_or(true)\n}\n```",
+      "section": "venv-health",
+      "title": "Replace `fn venv_numpy_ok()` with `fn venv_healthy()` in `src/app.rs`",
+      "description": "Replace the single-purpose `venv_numpy_ok()` function with `venv_healthy()` that checks both numpy<2 AND the tomli/tomllib import in a single Python subprocess. Remove `venv_numpy_ok()` entirely.\n\nReplace the existing `venv_numpy_ok()` block with:\n\n```rust\n/// Returns false when the venv exists but fails a required-package check:\n/// numpy must be < 2 (whisper ABI compat) and tomli/tomllib must import.\n/// Returns true when the venv is absent or all checks pass.\nfn venv_healthy() -> bool {\n    let venv_python = dirs::home_dir()\n        .unwrap_or_default()\n        .join(\".config/yaptap/.venv/bin/python\");\n    if !venv_python.is_file() {\n        return true;\n    }\n    std::process::Command::new(&venv_python)\n        .args([\n            \"-c\",\n            \"import numpy; v=numpy.__version__.split('.'); \\\nassert int(v[0]) < 2, 'numpy>=2'; \\\nimport sys; \\\nm='tomllib' if sys.version_info>=(3,11) else 'tomli'; \\\n__import__(m)\",\n        ])\n        .env(\"PATH\", crate::config::brew_augmented_path())\n        .output()\n        .map(|o| o.status.success())\n        .unwrap_or(true)\n}\n```",
       "checks": [
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
-        "With tomli absent from venv (Python 3.9): `venv_tomli_ok()` returns false.",
-        "With tomli installed in venv: `venv_tomli_ok()` returns true.",
-        "With no venv: `venv_tomli_ok()` returns true."
+        "Confirm `venv_numpy_ok` no longer appears anywhere in src/app.rs (`grep venv_numpy_ok src/app.rs` → no output).",
+        "With tomli absent and numpy 1.x: `venv_healthy()` returns false.",
+        "With tomli installed and numpy 1.x: `venv_healthy()` returns true.",
+        "With no venv: `venv_healthy()` returns true."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P11-T003",
-      "section": "venv-repair",
-      "title": "Extend the venv-repair gate in `run_app()` to also trigger on `!venv_tomli_ok()`",
-      "description": "Combine both health checks into a single condition so missing tomli (or broken numpy) both trigger venv deletion and re-setup.\n\nCurrent repair block in `run_app()`:\n```rust\n        if !venv_numpy_ok() {\n            tracing::warn!(\"numpy>=2 detected in venv — removing for re-setup\");\n            let venv_dir = dirs::home_dir()\n                .unwrap_or_default()\n                .join(\".config/yaptap/.venv\");\n            let _ = std::fs::remove_dir_all(&venv_dir);\n        }\n```\n\nReplace with:\n```rust\n        if !venv_numpy_ok() || !venv_tomli_ok() {\n            tracing::warn!(\"venv health check failed (numpy or tomli) — removing for re-setup\");\n            let venv_dir = dirs::home_dir()\n                .unwrap_or_default()\n                .join(\".config/yaptap/.venv\");\n            let _ = std::fs::remove_dir_all(&venv_dir);\n        }\n```",
+      "section": "venv-health",
+      "title": "Add `fn try_pip_repair() -> bool` to `src/app.rs`",
+      "description": "Add a lightweight repair function that attempts to install (or re-pin) the required packages into the existing venv without tearing it down. Installs `numpy<2` (downgrades 2.x if present) and `tomli`. Returns true if pip exits 0.\n\nPlace immediately after `venv_healthy()`:\n\n```rust\n/// Attempts a lightweight in-place repair: pip-install the required packages\n/// into the existing venv. Returns true if pip exits 0.\n/// Called when venv_healthy() is false — falls back to full teardown if false.\nfn try_pip_repair() -> bool {\n    let pip = dirs::home_dir()\n        .unwrap_or_default()\n        .join(\".config/yaptap/.venv/bin/pip\");\n    std::process::Command::new(pip)\n        .args([\"install\", \"--quiet\", \"numpy<2\", \"tomli\"])\n        .env(\"PATH\", crate::config::brew_augmented_path())\n        .output()\n        .map(|o| o.status.success())\n        .unwrap_or(false)\n}\n```",
       "checks": [
         "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
-        "With tomli absent from venv: launch app — venv is deleted, 'Setting up YapTap' alert appears, new venv has tomli installed.",
-        "With healthy venv (numpy 1.x, tomli present): launch app — no setup alert, tray icon appears directly."
+        "With a healthy venv: `try_pip_repair()` exits 0 and returns true.",
+        "With a broken pip path (no venv): `try_pip_repair()` returns false."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P11-T004",
-      "section": "verification",
-      "title": "Verify `cargo build`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
-      "description": "After P11-T001 through P11-T003, confirm no regressions.",
+      "section": "venv-repair",
+      "title": "Replace repair gate in `run_app()` with two-stage repair using `venv_healthy()` and `try_pip_repair()` (`src/app.rs`)",
+      "description": "Replace the existing single-stage teardown gate (which only checked `!venv_numpy_ok()`) with a two-stage repair that tries pip first and only tears down the venv as a last resort.\n\nCurrent block in `run_app()` (lines ~649–665):\n```rust\n    // ── First-launch Python venv setup (with numpy-compat repair) ────────────\n    // Must be after ensure_single_instance() so the alert is never shown to a\n    // duplicate instance that is about to exit 0.\n    {\n        // Auto-repair: if the venv exists but has numpy>=2, remove it so\n        // first-launch setup re-runs and installs the pinned numpy<2.\n        if !venv_numpy_ok() {\n            tracing::warn!(\"numpy>=2 detected in venv — removing for re-setup\");\n            let venv_dir = dirs::home_dir()\n                .unwrap_or_default()\n                .join(\".config/yaptap/.venv\");\n            let _ = std::fs::remove_dir_all(&venv_dir);\n        }\n        let venv_python = dirs::home_dir()\n            .unwrap_or_default()\n            .join(\".config/yaptap/.venv/bin/python\");\n        if !venv_python.is_file() {\n            run_first_launch_setup();\n        }\n    }\n```\n\nReplace with:\n```rust\n    // ── First-launch Python venv setup (with two-stage health repair) ────────\n    // Must be after ensure_single_instance() so the alert is never shown to a\n    // duplicate instance that is about to exit 0.\n    {\n        // Stage 1: lightweight repair — attempt pip install in-place.\n        // Stage 2: full teardown — only if pip repair fails.\n        if !venv_healthy() {\n            tracing::warn!(\"venv health check failed — attempting pip repair\");\n            if !try_pip_repair() {\n                tracing::warn!(\"pip repair failed — removing venv for full re-setup\");\n                let venv_dir = dirs::home_dir()\n                    .unwrap_or_default()\n                    .join(\".config/yaptap/.venv\");\n                let _ = std::fs::remove_dir_all(&venv_dir);\n            } else {\n                tracing::info!(\"pip repair succeeded\");\n            }\n        }\n        let venv_python = dirs::home_dir()\n            .unwrap_or_default()\n            .join(\".config/yaptap/.venv/bin/python\");\n        if !venv_python.is_file() {\n            run_first_launch_setup();\n        }\n    }\n```",
       "checks": [
-        "Run `cargo build` — exit 0.",
-        "Run `cargo clippy -- -D warnings` — no warnings.",
-        "Run `cargo test` — all 10 tests pass."
+        "Run `cargo build` exit 0; `cargo clippy -- -D warnings` clean.",
+        "With tomli absent from venv (pip repair succeeds): launch app — no setup alert, no teardown, app starts directly; `pip show tomli` in venv shows a version.",
+        "With numpy>=2 in venv (pip repair likely fails due to pip refusing to downgrade): launch app — venv is deleted, 'Setting up YapTap' alert appears, new venv has numpy 1.x and tomli.",
+        "With healthy venv (numpy 1.x, tomli present): launch app — no setup alert, tray icon appears directly."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
     },
     {
       "id": "P11-T005",
-      "section": "verification",
-      "title": "End-to-end: install tomli into existing venv, confirm LLM step works without rebuild",
-      "description": "Quick verification using the existing venv (avoids 30-second full rebuild).\n\n1. `~/.config/yaptap/.venv/bin/pip install tomli --quiet`\n2. Run `arch -x86_64 ~/.config/yaptap/.venv/bin/python -c \"import tomli; print('tomli ok', tomli.__version__)\"`\n3. Confirm `venv_tomli_ok()` logic returns true: `arch -x86_64 ~/.config/yaptap/.venv/bin/python -c \"import sys; m='tomllib' if sys.version_info>=(3,11) else 'tomli'; __import__(m); print('ok')\"`",
+      "section": "makefile",
+      "title": "Add `install` target to `Makefile`",
+      "description": "Add a `make install` target that copies the built app bundle to /Applications/. This is needed to deploy the fix to the running copy without manually dragging files.\n\nAdd `install` to the `.PHONY` line and add the target after `app`:\n\n```makefile\n.PHONY: build icns app install dmg clean\n```\n\n```makefile\n## Install app bundle to /Applications/ (replaces existing copy)\ninstall: app\n\trm -rf /Applications/YapTap.app\n\tcp -r $(APP_DIR) /Applications/YapTap.app\n\t@echo \"Installed: /Applications/YapTap.app\"\n```\n\nPlace immediately after the `app` target block and before the `dmg` target.",
       "checks": [
-        "tomli installs without error.",
-        "Import check exits 0 and prints 'ok'.",
-        "The LLM step no longer triggers 'ModuleNotFoundError: No module named tomli'."
+        "Run `make install` — exits 0, prints 'Installed: /Applications/YapTap.app'.",
+        "`ls -la /Applications/YapTap.app` shows the freshly built bundle with today's timestamp."
       ],
-      "implementation_status": "to do"
+      "implementation_status": "done"
+    },
+    {
+      "id": "P11-T006",
+      "section": "verification",
+      "title": "Verify `cargo build`, `cargo clippy -- -D warnings`, and `cargo test` pass clean",
+      "description": "After P11-T001 through P11-T005, confirm no regressions.",
+      "checks": [
+        "Run `cargo build` — exit 0.",
+        "Run `cargo clippy -- -D warnings` — no warnings.",
+        "Run `cargo test` — all tests pass."
+      ],
+      "implementation_status": "done"
+    },
+    {
+      "id": "P11-T007",
+      "section": "verification",
+      "title": "End-to-end: `make install`, verify pip repair path and LLM step",
+      "description": "Verify the full repair-and-deploy pipeline.\n\n1. Confirm tomli is missing from the current venv: `~/.config/yaptap/.venv/bin/pip show tomli` → 'WARNING: Package(s) not found'.\n2. Run `make install` — builds release binary, assembles bundle, copies to /Applications/.\n3. Launch /Applications/YapTap.app — pip repair should run silently (no setup alert), app starts.\n4. Confirm tomli is now present: `~/.config/yaptap/.venv/bin/pip show tomli` → shows version.\n5. Press hotkey, speak, select a prompt — LLM step completes, result on clipboard. No 'ModuleNotFoundError: No module named tomli' alert.",
+      "checks": [
+        "`make install` exits 0.",
+        "App launches without 'Setting up YapTap' alert.",
+        "`pip show tomli` in venv shows a version after launch.",
+        "LLM step no longer triggers 'ModuleNotFoundError: No module named tomli'.",
+        "Transcription still works (no regression)."
+      ],
+      "implementation_status": "done"
     }
   ]
 }

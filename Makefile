@@ -10,7 +10,7 @@ SOURCE_ICON = assets/icons/yaptap-idle@2x.png
 ICONSET     = assets/icons/AppIcon.iconset
 ICNS        = assets/icons/YapTap.icns
 
-.PHONY: build icns app dmg clean
+.PHONY: build icns app install dmg clean
 
 ## Compile Rust binary in release mode
 build:
@@ -60,6 +60,12 @@ app: build icns
 
 	# App icon
 	cp $(ICNS) $(CONTENTS)/Resources/YapTap.icns
+
+## Install app bundle to /Applications/ (replaces existing copy)
+install: app
+	rm -rf /Applications/YapTap.app
+	cp -r $(APP_DIR) /Applications/YapTap.app
+	@echo "Installed: /Applications/YapTap.app"
 
 ## Build distributable DMG
 dmg: app

@@ -214,7 +214,7 @@ fn run_setup_commands() -> Result<(), String> {
 
     let pip = venv_dir.join("bin/pip");
     let status = std::process::Command::new(pip)
-        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama"])
+        .args(["install", "--quiet", "numpy<2", "openai-whisper", "ollama", "tomli"])
         .status()
         .map_err(|e| format!("failed to spawn pip: {e}"))?;
     if !status.success() {
@@ -224,9 +224,10 @@ fn run_setup_commands() -> Result<(), String> {
     Ok(())
 }
 
-/// Returns false when the venv exists but its numpy is >= 2 (ABI-incompatible with whisper).
-/// Returns true when the venv is absent (not our concern) or numpy is 1.x.
-fn venv_numpy_ok() -> bool {
+/// Returns false when the venv exists but fails a required-package check:
+/// numpy must be < 2 (whisper ABI compat) and tomli/tomllib must import.
+/// Returns true when the venv is absent or all checks pass.
+fn venv_healthy() -> bool {
     let venv_python = dirs::home_dir()
         .unwrap_or_default()
         .join(".config/yaptap/.venv/bin/python");
@@ -236,13 +237,31 @@ fn venv_numpy_ok() -> bool {
     std::process::Command::new(&venv_python)
         .args([
             "-c",
-            "import numpy; v=numpy.__version__.split('.');\
-             assert int(v[0]) < 2, 'numpy>=2'",
+            "import numpy; v=numpy.__version__.split('.'); \
+assert int(v[0]) < 2, 'numpy>=2'; \
+import sys; \
+m='tomllib' if sys.version_info>=(3,11) else 'tomli'; \
+__import__(m)",
         ])
         .env("PATH", crate::config::brew_augmented_path())
         .output()
         .map(|o| o.status.success())
         .unwrap_or(true)
+}
+
+/// Attempts a lightweight in-place repair: pip-install the required packages
+/// into the existing venv. Returns true if pip exits 0.
+/// Called when venv_healthy() is false — falls back to full teardown if false.
+fn try_pip_repair() -> bool {
+    let pip = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/yaptap/.venv/bin/pip");
+    std::process::Command::new(pip)
+        .args(["install", "--quiet", "numpy<2", "tomli"])
+        .env("PATH", crate::config::brew_augmented_path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn run_first_launch_setup() {
@@ -643,18 +662,23 @@ pub fn run_app() {
     // ── Single-instance guard (may exit 0 if another copy is running) ─────────
     ensure_single_instance();
 
-    // ── First-launch Python venv setup (with numpy-compat repair) ────────────
+    // ── First-launch Python venv setup (with two-stage health repair) ────────
     // Must be after ensure_single_instance() so the alert is never shown to a
     // duplicate instance that is about to exit 0.
     {
-        // Auto-repair: if the venv exists but has numpy>=2, remove it so
-        // first-launch setup re-runs and installs the pinned numpy<2.
-        if !venv_numpy_ok() {
-            tracing::warn!("numpy>=2 detected in venv — removing for re-setup");
-            let venv_dir = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".config/yaptap/.venv");
-            let _ = std::fs::remove_dir_all(&venv_dir);
+        // Stage 1: lightweight repair — attempt pip install in-place.
+        // Stage 2: full teardown — only if pip repair fails.
+        if !venv_healthy() {
+            tracing::warn!("venv health check failed — attempting pip repair");
+            if !try_pip_repair() {
+                tracing::warn!("pip repair failed — removing venv for full re-setup");
+                let venv_dir = dirs::home_dir()
+                    .unwrap_or_default()
+                    .join(".config/yaptap/.venv");
+                let _ = std::fs::remove_dir_all(&venv_dir);
+            } else {
+                tracing::info!("pip repair succeeded");
+            }
         }
         let venv_python = dirs::home_dir()
             .unwrap_or_default()
