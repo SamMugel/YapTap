@@ -25,9 +25,11 @@ use crate::config::AppConfig;
 // ── Icon bytes (embedded at compile time) ─────────────────────────────────────
 
 const ICON_IDLE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-idle.png");
+// tray-icon 0.14 has no @2x API; retained for when Retina support is added.
 #[allow(dead_code)]
 const ICON_IDLE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-idle@2x.png");
 const ICON_ACTIVE_1X: &[u8] = include_bytes!("../assets/icons/yaptap-active.png");
+// tray-icon 0.14 has no @2x API; retained for when Retina support is added.
 #[allow(dead_code)]
 const ICON_ACTIVE_2X: &[u8] = include_bytes!("../assets/icons/yaptap-active@2x.png");
 
@@ -294,6 +296,9 @@ fn run_first_launch_setup() {
     });
 
     // Pump the NSApp event loop until setup completes.
+    // SAFETY: nextEventMatchingMask:untilDate:inMode:dequeue: and sendEvent:
+    // are main-thread-only NSApplication methods.  run_first_launch_setup() is
+    // only ever called from the main thread (guaranteed by its call site in run_app()).
     let setup_result: Result<(), String> = unsafe {
         let app: id = msg_send![objc::class!(NSApplication), sharedApplication];
         loop {
@@ -322,6 +327,7 @@ fn run_first_launch_setup() {
     };
 
     // Dismiss the setup alert.
+    // SAFETY: orderOut: is a main-thread NSWindow method; this is the main thread.
     unsafe {
         let _: () = msg_send![setup_window, orderOut: cocoa::base::nil];
     }
@@ -709,7 +715,9 @@ pub fn run_app() {
     let app_event_tx = Arc::new(app_event_tx);
 
     // ── Accessibility check + global hotkey thread ────────────────────────────
-    if !crate::hotkey::ax_is_process_trusted() {
+    let ax_trusted = crate::hotkey::ax_is_process_trusted();
+    tracing::info!(trusted = ax_trusted, "accessibility trust");
+    if !ax_trusted {
         let btn = show_alert(
             "Accessibility Required",
             "YapTap needs Accessibility access to capture the global hotkey.\n\nOpen System Settings \u{2192} Privacy & Security \u{2192} Accessibility?\n\nAfter granting permission, quit and relaunch YapTap to activate the hotkey.",
@@ -742,6 +750,9 @@ pub fn run_app() {
                     // Declared here (thread::spawn closure scope) so it can be
                     // referenced inside the nested rdev callback closure.
                     static LISTEN_STARTED: std::sync::Once = std::sync::Once::new();
+                    // SAFETY: This closure runs on the rdev CGEventTap thread.
+                    // No Cocoa/AppKit calls are permitted here.  All UI feedback
+                    // must go via the AppEvent channel.
                     let result = rdev::listen(move |event| {
                         // P7-I009: fires on the very first event of any type,
                         // confirming the tap has started receiving events.
