@@ -1,0 +1,172 @@
+{
+  "phase": 14,
+  "phase_name": "Ollama backend reliability: diagnostics, empty-transcript guard, and LLM input logging",
+  "goal": "Address two observed failure modes when using the Ollama backend: (1) the LLM returns a generic 'I'm sorry—I'm having trouble understanding' response; (2) the LLM produces nothing, leaving the clipboard empty or containing only whitespace. Root causes: an empty or near-empty transcript is passed to the LLM without any guard, and ollama can silently return an empty streaming response with exit 0. Additionally, add a per-call JSON log of LLM inputs and outputs to ~/.config/yaptap/logs/ to aid post-hoc debugging.",
+  "tasks": [
+    {
+      "id": "P14-T001",
+      "section": "checks",
+      "title": "Log a WARNING in `stream_response()` when transcript is empty or whitespace-only",
+      "description": "In `src/core/llm.py`, inside `stream_response()`, add an empty-transcript warning immediately after the prompt file is loaded and `messages` is built — before dispatching to any provider.\n\nAdd:\n```python\nif not transcript.strip():\n    logger.warning(\n        \"Empty transcript passed to LLM; model response may be unhelpful\",\n        extra={\"provider\": provider, \"model\": model_name},\n    )\n```\n\nThis surfaces the root cause of the 'I'm sorry' response in stderr/logs when it happens. Follow python-logging.mdc: constant message string, runtime values in `extra`.\n\nThis is a diagnostic only — per the spec (specs/llm.md § Error Cases), an empty transcript is still forwarded to the provider.",
+      "checks": [
+        "`grep 'Empty transcript passed to LLM' src/core/llm.py` returns a match.",
+        "`python -m unittest src.core.llm_test` passes (all existing tests).",
+        "python Black formatting passes on `src/core/llm.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T002",
+      "section": "checks",
+      "title": "Raise `RuntimeError` in `stream_response()` when the LLM yields zero tokens",
+      "description": "In `src/core/llm.py`, modify both the `ollama` and `compactifai` branches of `stream_response()` to detect and reject an empty streaming response.\n\nFor each branch, add a `yielded_any` flag:\n```python\nyielded_any = False\nfor chunk in response:\n    token = ...  # existing extraction\n    if token:\n        yielded_any = True\n    yield token\nif not yielded_any:\n    raise RuntimeError(\n        \"LLM returned empty response — transcript may be empty or model unresponsive\"\n    )\n```\n\nPlacing the raise **after** the for loop (not inside it) preserves the generator contract: the exception is only raised when the caller has exhausted the iterator.\n\nThis converts the silent 'nothing on clipboard' failure into an explicit `RuntimeError` that propagates through `main()` to stderr and exit 1, which Rust surfaces as a pipeline error alert.\n\nUpdate the docstring Raises section to document this new RuntimeError.",
+      "checks": [
+        "`grep 'LLM returned empty response' src/core/llm.py` returns a match.",
+        "Both the ollama and compactifai branches contain `yielded_any` logic (`grep 'yielded_any' src/core/llm.py` returns ≥2 matches).",
+        "`python -m unittest src.core.llm_test` passes.",
+        "python Black formatting passes on `src/core/llm.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T003",
+      "section": "checks",
+      "title": "Fix ollama chunk token access to use attribute access (`chunk.message.content`)",
+      "description": "In `src/core/llm.py`, the ollama branch currently uses dict-style access:\n```python\nyield chunk[\"message\"][\"content\"]\n```\n\nThe `ollama` Python library v0.3+ returns `ChatResponse` pydantic objects that use attribute access, not `__getitem__`. Dict-style access raises `TypeError` on newer versions, which is caught by the `except Exception` and re-raised as `RuntimeError`, surfacing as an error dialog.\n\nChange to attribute access:\n```python\nyield chunk.message.content\n```\n\nUpdate the mock in `src/core/llm_test.py` `test_stream_response_yields_tokens_on_valid_input` to use objects with attribute access instead of raw dicts:\n```python\nchunk1 = MagicMock()\nchunk1.message.content = \"Hello\"\nchunk2 = MagicMock()\nchunk2.message.content = \" world\"\nmock_response = [chunk1, chunk2]\n```\n\nThis matches the pattern already used in the CompactifAI test (`test_stream_response_compactifai_yields_tokens`).",
+      "checks": [
+        "`grep 'chunk.message.content' src/core/llm.py` returns a match in the ollama branch.",
+        "`grep 'chunk\\[' src/core/llm.py` returns no match (dict-style access removed).",
+        "`python -m unittest src.core.llm_test` passes.",
+        "python Black formatting passes on `src/core/llm.py` and `src/core/llm_test.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T004",
+      "section": "checks",
+      "title": "Read stdout and stderr concurrently in `run_llm_collect()` to prevent pipe deadlock",
+      "description": "In `src/llm.rs`, `run_llm_collect()` currently reads stdout (blocking until EOF) and stderr sequentially. If the subprocess writes more than ~64 KB to stderr before stdout EOF, the stderr pipe fills and the subprocess blocks, deadlocking.\n\nFix: spawn a background thread to drain stderr concurrently while the main thread reads stdout.\n\nReplace the sequential stdout/stderr read block with:\n```rust\n// Read stderr concurrently to prevent pipe buffer deadlock.\nlet stderr_thread = stderr_handle.map(|mut stderr| {\n    std::thread::spawn(move || {\n        let mut s = String::new();\n        let _ = stderr.read_to_string(&mut s);\n        s\n    })\n});\n\nlet mut stdout_str = String::new();\nif let Some(mut stdout) = stdout_handle {\n    stdout\n        .read_to_string(&mut stdout_str)\n        .context(\"while reading stdout from llm.py\")?;\n}\n\nlet stderr_str = stderr_thread\n    .and_then(|h| h.join().ok())\n    .unwrap_or_default();\n```\n\nRemove the separate `let mut stderr_str` block that previously followed the stdout read. The rest of the function (`wait`, exit-code check) is unchanged.\n\nAdd `use std::io::Read as _;` is already present. No new imports required.",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`grep 'stderr_thread' src/llm.rs` returns a match.",
+        "`cargo test` passes."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T005",
+      "section": "improvements",
+      "title": "Add empty-transcript guard in `run_pipeline_inner()` in `src/app.rs`",
+      "description": "In `src/app.rs`, inside `run_pipeline_inner()`, immediately after the `run_transcription` call and before the LLM block, add:\n\n```rust\nif transcript.trim().is_empty() {\n    anyhow::bail!(\n        \"No speech detected — recording may be too short or too quiet.\"\n    );\n}\n```\n\nThis bails the pipeline before calling the LLM, preventing both observed failure modes:\n- Empty transcript → 'I'm sorry' model response\n- Empty transcript → empty LLM streaming response → whitespace clipboard\n\nThe bail message is user-facing (shown in the pipeline error alert). Keep it actionable.\n\nThe guard fires only when a prompt is selected (i.e., when the LLM would be called). If no prompt is selected, the transcript is passed directly to the clipboard — an empty transcript is acceptable there (the user records silence intentionally). Move the guard inside the `if !config.selected_prompt.is_empty()` block, before the `ollama_available()` check.",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
+        "`grep 'No speech detected' src/app.rs` returns a match.",
+        "Guard is inside the `if !config.selected_prompt.is_empty()` block, not at the top of `run_pipeline_inner`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T006",
+      "section": "logging",
+      "title": "Add `--log-dir` optional argument to `llm.py`",
+      "description": "In `src/core/llm.py`, add an optional `--log-dir` argument to the `argparse` block in `main()`:\n\n```python\nparser.add_argument(\n    \"--log-dir\",\n    default=None,\n    help=\"Directory for LLM call log files (created if absent). If omitted, no log is written.\",\n)\n```\n\nPass `args.log_dir` to the log-writing function added in P14-T007.\n\nUpdate the module-level docstring to mention the `--log-dir` flag.",
+      "checks": [
+        "`python3 src/core/llm.py --help` includes `--log-dir` in the output.",
+        "`grep '\\-\\-log-dir' src/core/llm.py` returns a match in the argparse block.",
+        "`python -m unittest src.core.llm_test` passes.",
+        "python Black formatting passes on `src/core/llm.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T007",
+      "section": "logging",
+      "title": "Implement `_write_llm_log()` in `llm.py` and call from `main()`",
+      "description": "In `src/core/llm.py`, add a private helper function:\n\n```python\ndef _write_llm_log(\n    log_dir: str,\n    provider: str,\n    model: str,\n    prompt_path: str,\n    system_prompt: str,\n    transcript: str,\n    response: str,\n    error: str | None,\n) -> None:\n    \"\"\"Append a JSON call record to <log_dir>/llm_calls.jsonl.\"\"\"\n    import json\n    from datetime import datetime, timezone\n    from pathlib import Path\n\n    log_path = Path(log_dir)\n    try:\n        log_path.mkdir(parents=True, exist_ok=True)\n        record = {\n            \"timestamp\": datetime.now(timezone.utc).isoformat(),\n            \"provider\": provider,\n            \"model\": model,\n            \"prompt_path\": prompt_path,\n            \"system_prompt\": system_prompt,\n            \"transcript\": transcript,\n            \"response\": response,\n            \"error\": error,\n        }\n        with (log_path / \"llm_calls.jsonl\").open(\"a\", encoding=\"utf-8\") as fh:\n            fh.write(json.dumps(record, ensure_ascii=False) + \"\\n\")\n    except Exception as exc:  # log errors must never crash the pipeline\n        logger.warning(\"Failed to write LLM log\", extra={\"log_dir\": log_dir, \"error\": str(exc)})\n```\n\nIn `main()`, collect the full response into a string while streaming, then call `_write_llm_log()` at the end:\n\n```python\nresponse_parts: list[str] = []\ntry:\n    for token in stream_response(transcript, args.prompt_file, args.model, args.provider):\n        print(token, end=\"\", flush=True)\n        response_parts.append(token)\nexcept (ValueError, RuntimeError) as err:\n    if args.log_dir:\n        _write_llm_log(\n            args.log_dir, args.provider, args.model, args.prompt_file,\n            \"\",  # system_prompt not extracted here; use empty string\n            transcript, \"\", str(err),\n        )\n    print(f\"error: {err}\", file=sys.stderr)\n    sys.exit(1)\n\nif args.log_dir:\n    _write_llm_log(\n        args.log_dir, args.provider, args.model, args.prompt_file,\n        \"\",  # system prompt already validated; omit to avoid re-reading file\n        transcript, \"\".join(response_parts), None,\n    )\nprint()  # final newline\n```\n\nNote: the `system_prompt` field is left empty in `main()` to avoid re-reading the TOML file after `stream_response()` has already consumed it. A future task could pass it through if needed.\n\nThe log format is JSON Lines (one record per line in `llm_calls.jsonl`). This file appends across sessions and is easy to inspect with `tail`, `jq`, etc.\n\nErrors from `_write_llm_log()` are caught internally and logged as WARNING — they must never propagate and interrupt the pipeline.",
+      "checks": [
+        "`grep '_write_llm_log' src/core/llm.py` returns matches for the definition and both call sites (success and error paths).",
+        "`grep 'llm_calls.jsonl' src/core/llm.py` returns a match.",
+        "Calling `python3 src/core/llm.py --prompt-file <valid.toml> --log-dir /tmp/yaptap_log_test` with transcript on stdin produces a file at `/tmp/yaptap_log_test/llm_calls.jsonl` containing a valid JSON object per line.",
+        "Errors from `_write_llm_log()` are caught — validated by passing a non-writable log_dir and confirming the main flow still exits 0.",
+        "`python -m unittest src.core.llm_test` passes.",
+        "python Black formatting passes on `src/core/llm.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T008",
+      "section": "logging",
+      "title": "Add `log_dir: Option<&Path>` parameter to `run_llm_collect()` in `src/llm.rs`",
+      "description": "Extend `run_llm_collect()` in `src/llm.rs` to accept an optional log directory path and forward it as `--log-dir` to `llm.py`.\n\nNew signature (add parameter after `active_child`):\n```rust\npub fn run_llm_collect(\n    transcript: &str,\n    prompt_path: &Path,\n    model: &str,\n    provider: &str,\n    api_key: Option<&str>,\n    active_child: &Arc<Mutex<Option<Child>>>,\n    log_dir: Option<&Path>,\n) -> Result<String>\n```\n\nIn the command builder block, after the existing `--provider` args, add:\n```rust\nif let Some(dir) = log_dir {\n    cmd.args([\"--log-dir\", &dir.to_string_lossy()]);\n}\n```\n\nUpdate the `/// # Contract` doc comment to document the new `log_dir` parameter.\n\nAll callers of `run_llm_collect` must be updated to pass the new argument (see P14-T009 for `app.rs`).",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
+        "`grep 'log_dir' src/llm.rs` returns matches in the signature, command builder block, and doc comment.",
+        "`grep '\\-\\-log-dir' src/llm.rs` returns a match."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T009",
+      "section": "logging",
+      "title": "Resolve `~/.config/yaptap/logs/` and pass to `run_llm_collect()` in `src/app.rs`",
+      "description": "In `src/app.rs`, inside `run_pipeline_inner()`, resolve the log directory and pass it to `run_llm_collect()`.\n\nBefore the `run_llm_collect()` call, add:\n```rust\nlet log_dir = dirs::home_dir().map(|h| h.join(\".config/yaptap/logs\"));\n```\n\nUpdate the `run_llm_collect()` call to pass `log_dir.as_deref()`:\n```rust\ncrate::llm::run_llm_collect(\n    &transcript,\n    &prompt_path,\n    &config.llm_model,\n    &config.llm_provider,\n    api_key.as_deref(),\n    &shared.child,\n    log_dir.as_deref(),\n)\n```\n\n`dirs::home_dir()` is already a dependency (used elsewhere in `app.rs`). No new crate required.",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
+        "Running the app with a valid prompt and recording produces a file at `~/.config/yaptap/logs/llm_calls.jsonl` containing a JSON record with non-empty `transcript` and `response` fields.",
+        "`grep 'yaptap/logs' src/app.rs` returns a match."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T010",
+      "section": "logging",
+      "title": "Pass `--log-dir ~/.config/yaptap/logs` to inline `llm.py` spawn in `src/main.rs`",
+      "description": "In `src/main.rs`, in the inline `llm.py` spawn block (CLI mode), resolve the log directory and pass it as `--log-dir`.\n\nBefore building `llm_cmd`, add:\n```rust\nlet log_dir: Option<std::path::PathBuf> = dirs::home_dir()\n    .map(|h| h.join(\".config/yaptap/logs\"));\n```\n\nIn the `llm_cmd` builder, after `--provider`:\n```rust\nif let Some(ref dir) = log_dir {\n    llm_cmd.arg(\"--log-dir\").arg(dir);\n}\n```\n\nUse `dirs::home_dir()` (the `dirs` crate is already a dependency).",
+      "checks": [
+        "`cargo build` exits 0; `cargo clippy -- -D warnings` clean.",
+        "`cargo test` passes.",
+        "Running `yaptap --prompt <name>` (CLI mode) produces a record in `~/.config/yaptap/logs/llm_calls.jsonl`.",
+        "`grep 'log.dir' src/main.rs` returns a match in the inline spawn block."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T011",
+      "section": "tests",
+      "title": "Add test for empty-transcript WARNING log in `llm_test.py`",
+      "description": "Add `test_stream_response_warns_on_empty_transcript()` to `src/core/llm_test.py`.\n\n- Create a valid temporary TOML prompt file.\n- Patch `ollama.chat` to return an iterator with one non-empty chunk (so the test does not raise on zero tokens — that is tested separately in P14-T012).\n- Capture log records using `self.assertLogs('src.core.llm', level='WARNING')` context manager.\n- Call `list(stream_response(\"\", toml_path))` (empty transcript).\n- Assert at least one WARNING record contains `'Empty transcript'`.\n- Include a What/Why docstring following the pattern in `llm_test.py`.",
+      "checks": [
+        "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_warns_on_empty_transcript` passes.",
+        "python Black formatting passes on `src/core/llm_test.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T012",
+      "section": "tests",
+      "title": "Add test for zero-token `RuntimeError` in `llm_test.py`",
+      "description": "Add `test_stream_response_raises_on_empty_ollama_response()` to `src/core/llm_test.py`.\n\n- Create a valid temporary TOML prompt file.\n- Patch `ollama.chat` to return an empty iterator (`iter([])`).\n- Call `list(stream_response(\"some transcript\", toml_path))`.\n- Assert `RuntimeError` is raised with a message containing `'empty response'`.\n- Include a What/Why docstring.\n\nAlso add `test_stream_response_raises_on_empty_compactifai_response()`:\n- Set `MULTIVERSE_IAM_API_KEY` in env.\n- Mock `openai.OpenAI` client so `chat.completions.create()` returns an empty iterator.\n- Assert `RuntimeError` with `'empty response'`.\n- Clean up env after test.",
+      "checks": [
+        "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_raises_on_empty_ollama_response` passes.",
+        "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_raises_on_empty_compactifai_response` passes.",
+        "python Black formatting passes on `src/core/llm_test.py`."
+      ],
+      "status": "to do"
+    },
+    {
+      "id": "P14-T013",
+      "section": "tests",
+      "title": "Add test for log file creation in `llm_test.py`",
+      "description": "Add `test_write_llm_log_creates_jsonl_with_expected_fields()` to `src/core/llm_test.py`.\n\n- Import `_write_llm_log` from `src.core.llm` (add to `__all__` or import directly).\n- Use `tempfile.TemporaryDirectory()` as the log directory.\n- Call `_write_llm_log(tmpdir, 'ollama', 'llama3', '/tmp/p.toml', 'Be helpful', 'hello', 'world', None)`.\n- Assert that `<tmpdir>/llm_calls.jsonl` exists.\n- Parse the first line as JSON.\n- Assert the record contains keys: `timestamp`, `provider`, `model`, `prompt_path`, `system_prompt`, `transcript`, `response`, `error`.\n- Assert `record['provider'] == 'ollama'` and `record['transcript'] == 'hello'`.\n- Call `_write_llm_log()` a second time and assert the file now contains exactly two lines (JSONL append).\n- Include a What/Why docstring.",
+      "checks": [
+        "`python -m unittest src.core.llm_test.LlmTest.test_write_llm_log_creates_jsonl_with_expected_fields` passes.",
+        "`python -m unittest src.core.llm_test` runs all tests and passes.",
+        "python Black formatting passes on `src/core/llm_test.py`."
+      ],
+      "status": "to do"
+    }
+  ]
+}
