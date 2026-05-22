@@ -13,7 +13,7 @@
         "`python -m unittest src.core.llm_test` passes (all existing tests).",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T002",
@@ -26,7 +26,7 @@
         "`python -m unittest src.core.llm_test` passes.",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T003",
@@ -39,7 +39,7 @@
         "`python -m unittest src.core.llm_test` passes.",
         "python Black formatting passes on `src/core/llm.py` and `src/core/llm_test.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T004",
@@ -51,7 +51,7 @@
         "`grep 'stderr_thread' src/llm.rs` returns a match.",
         "`cargo test` passes."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T005",
@@ -64,7 +64,7 @@
         "`grep 'No speech detected' src/app.rs` returns a match.",
         "Guard is inside the `if !config.selected_prompt.is_empty()` block, not at the top of `run_pipeline_inner`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T006",
@@ -77,7 +77,7 @@
         "`python -m unittest src.core.llm_test` passes.",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T007",
@@ -92,7 +92,7 @@
         "`python -m unittest src.core.llm_test` passes.",
         "python Black formatting passes on `src/core/llm.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T008",
@@ -105,7 +105,7 @@
         "`grep 'log_dir' src/llm.rs` returns matches in the signature, command builder block, and doc comment.",
         "`grep '\\-\\-log-dir' src/llm.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T009",
@@ -118,7 +118,7 @@
         "Running the app with a valid prompt and recording produces a file at `~/.config/yaptap/logs/llm_calls.jsonl` containing a JSON record with non-empty `transcript` and `response` fields.",
         "`grep 'yaptap/logs' src/app.rs` returns a match."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T010",
@@ -131,7 +131,7 @@
         "Running `yaptap --prompt <name>` (CLI mode) produces a record in `~/.config/yaptap/logs/llm_calls.jsonl`.",
         "`grep 'log.dir' src/main.rs` returns a match in the inline spawn block."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T011",
@@ -142,7 +142,7 @@
         "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_warns_on_empty_transcript` passes.",
         "python Black formatting passes on `src/core/llm_test.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T012",
@@ -154,7 +154,7 @@
         "`python -m unittest src.core.llm_test.LlmTest.test_stream_response_raises_on_empty_compactifai_response` passes.",
         "python Black formatting passes on `src/core/llm_test.py`."
       ],
-      "status": "to do"
+      "status": "done"
     },
     {
       "id": "P14-T013",
@@ -166,7 +166,7 @@
         "`python -m unittest src.core.llm_test` runs all tests and passes.",
         "python Black formatting passes on `src/core/llm_test.py`."
       ],
-      "status": "to do"
+      "status": "done"
     }
   ]
 }
