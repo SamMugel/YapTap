@@ -53,6 +53,7 @@ fn llm_script_path() -> PathBuf {
 /// - Passes `--prompt-file <prompt_path>` and `--model <model>` to `llm.py`.
 /// - Passes `--provider <provider>` to `llm.py`.
 /// - If `api_key` is `Some`, injects `MULTIVERSE_IAM_API_KEY` into the subprocess environment.
+/// - If `log_dir` is `Some`, passes `--log-dir <dir>` to `llm.py` for per-call JSON logging.
 /// - Writes `transcript` to the child's stdin, then closes stdin.
 /// - Stores the spawned [`Child`] in `active_child` (replacing any previous
 ///   value) so external callers can interrupt it.
@@ -66,6 +67,7 @@ pub fn run_llm_collect(
     provider: &str,
     api_key: Option<&str>,
     active_child: &Arc<Mutex<Option<Child>>>,
+    log_dir: Option<&Path>,
 ) -> Result<String> {
     // ── Build command ─────────────────────────────────────────────────────────
     let script = llm_script_path();
@@ -82,6 +84,10 @@ pub fn run_llm_collect(
 
     if let Some(key) = api_key {
         cmd.env("MULTIVERSE_IAM_API_KEY", key);
+    }
+
+    if let Some(dir) = log_dir {
+        cmd.args(["--log-dir", &dir.to_string_lossy()]);
     }
 
     // ── Spawn ─────────────────────────────────────────────────────────────────
@@ -108,6 +114,18 @@ pub fn run_llm_collect(
         *guard = Some(child);
     }
 
+    // ── Read stderr concurrently to prevent pipe buffer deadlock ─────────────
+    // If the subprocess writes > ~64 KB to stderr before stdout EOF, the pipe
+    // buffer fills and the subprocess blocks, deadlocking. Draining stderr on a
+    // background thread avoids this.
+    let stderr_thread = stderr_handle.map(|mut stderr| {
+        std::thread::spawn(move || {
+            let mut s = String::new();
+            let _ = stderr.read_to_string(&mut s);
+            s
+        })
+    });
+
     // ── Buffer ALL stdout ─────────────────────────────────────────────────────
     let mut stdout_str = String::new();
     if let Some(mut stdout) = stdout_handle {
@@ -116,11 +134,9 @@ pub fn run_llm_collect(
             .context("while reading stdout from llm.py")?;
     }
 
-    // ── Read stderr ───────────────────────────────────────────────────────────
-    let mut stderr_str = String::new();
-    if let Some(mut stderr) = stderr_handle {
-        let _ = stderr.read_to_string(&mut stderr_str);
-    }
+    let stderr_str = stderr_thread
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
 
     // ── Wait for process ──────────────────────────────────────────────────────
     let status = {

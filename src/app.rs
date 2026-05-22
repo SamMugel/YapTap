@@ -680,6 +680,12 @@ fn run_pipeline_inner(
 
     // ── LLM (if a prompt is selected) ────────────────────────────────────────
     let output = if !config.selected_prompt.is_empty() {
+        if transcript.trim().is_empty() {
+            anyhow::bail!(
+                "No speech detected — recording may be too short or too quiet."
+            );
+        }
+
         // Probe Ollama availability only when using the ollama provider.
         if config.llm_provider == "ollama" && !ollama_available() {
             anyhow::bail!(
@@ -700,6 +706,8 @@ fn run_pipeline_inner(
             None
         };
 
+        let log_dir = dirs::home_dir().map(|h| h.join(".config/yaptap/logs"));
+
         if let Some(prompts_dir) = crate::config::prompts_dir() {
             let prompt_path = prompts_dir.join(format!("{}.toml", config.selected_prompt));
             crate::llm::run_llm_collect(
@@ -709,6 +717,7 @@ fn run_pipeline_inner(
                 &config.llm_provider,
                 api_key.as_deref(),
                 &shared.child,
+                log_dir.as_deref(),
             )?
         } else {
             transcript

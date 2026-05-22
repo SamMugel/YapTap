@@ -1,12 +1,13 @@
 """Tests for src.core.llm module."""
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.core.llm import stream_response
+from src.core.llm import _write_llm_log, stream_response
 
 
 class LlmTest(unittest.TestCase):
@@ -16,7 +17,7 @@ class LlmTest(unittest.TestCase):
 
         What is being tested:
             stream_response() with a real TOML file and a mocked ollama.chat
-            that returns a two-chunk streaming response.
+            that returns a two-chunk streaming response using attribute access.
 
         Why this test matters:
             Ensures the core happy-path pipeline (load TOML, build messages,
@@ -30,10 +31,11 @@ class LlmTest(unittest.TestCase):
             toml_path = f.name
 
         try:
-            mock_response = [
-                {"message": {"content": "Hello"}},
-                {"message": {"content": " world"}},
-            ]
+            chunk1 = MagicMock()
+            chunk1.message.content = "Hello"
+            chunk2 = MagicMock()
+            chunk2.message.content = " world"
+            mock_response = [chunk1, chunk2]
             with patch("ollama.chat") as mock_chat:
                 mock_chat.return_value = iter(mock_response)
                 chunks = list(stream_response("some transcript", toml_path))
@@ -281,6 +283,136 @@ class LlmTest(unittest.TestCase):
             self.assertIn("Unknown provider", str(ctx.exception))
         finally:
             os.unlink(toml_path)
+
+    def test_stream_response_warns_on_empty_transcript(self) -> None:
+        """Empty transcript triggers a WARNING log before the LLM is called.
+
+        What is being tested:
+            The empty-transcript warning in stream_response() that fires when
+            transcript.strip() is empty, before dispatching to any provider.
+
+        Why this test matters:
+            Surfaces the root cause of 'I'm sorry' model responses in logs when
+            an empty transcript is accidentally passed through the pipeline.
+        """
+        with tempfile.NamedTemporaryFile(
+            suffix=".toml", delete=False, mode="wb"
+        ) as f:
+            f.write(b'name = "test"\ndescription = "test"\nsystem = "Be helpful"\n')
+            toml_path = f.name
+
+        try:
+            chunk = MagicMock()
+            chunk.message.content = "response"
+            with patch("ollama.chat") as mock_chat:
+                mock_chat.return_value = iter([chunk])
+                with self.assertLogs("src.core.llm", level="WARNING") as log_ctx:
+                    list(stream_response("", toml_path))
+            self.assertTrue(
+                any("Empty transcript" in record for record in log_ctx.output)
+            )
+        finally:
+            os.unlink(toml_path)
+
+    def test_stream_response_raises_on_empty_ollama_response(self) -> None:
+        """ollama returning zero tokens raises RuntimeError.
+
+        What is being tested:
+            The yielded_any guard in the ollama branch of stream_response()
+            that raises RuntimeError when the provider streams no tokens at all.
+
+        Why this test matters:
+            Converts the silent 'nothing on clipboard' failure into an explicit
+            error that surfaces to the user via the pipeline error alert.
+        """
+        with tempfile.NamedTemporaryFile(
+            suffix=".toml", delete=False, mode="wb"
+        ) as f:
+            f.write(b'name = "test"\ndescription = "test"\nsystem = "Be helpful"\n')
+            toml_path = f.name
+
+        try:
+            with patch("ollama.chat") as mock_chat:
+                mock_chat.return_value = iter([])
+                with self.assertRaises(RuntimeError) as ctx:
+                    list(stream_response("some transcript", toml_path))
+            self.assertIn("empty response", str(ctx.exception))
+        finally:
+            os.unlink(toml_path)
+
+    def test_stream_response_raises_on_empty_compactifai_response(self) -> None:
+        """CompactifAI returning zero tokens raises RuntimeError.
+
+        What is being tested:
+            The yielded_any guard in the compactifai branch of stream_response()
+            that raises RuntimeError when the provider streams no tokens at all.
+
+        Why this test matters:
+            Mirrors the ollama zero-token guard so both providers surface the
+            same explicit error rather than leaving the clipboard empty.
+        """
+        with tempfile.NamedTemporaryFile(
+            suffix=".toml", delete=False, mode="wb"
+        ) as f:
+            f.write(b'name = "test"\ndescription = "test"\nsystem = "Be helpful"\n')
+            toml_path = f.name
+
+        os.environ["MULTIVERSE_IAM_API_KEY"] = "test-key-123"
+        try:
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = iter([])
+
+            with patch("openai.OpenAI", return_value=mock_client):
+                with self.assertRaises(RuntimeError) as ctx:
+                    list(
+                        stream_response(
+                            "some transcript",
+                            toml_path,
+                            "cai-llama-3-1-8b-slim",
+                            "compactifai",
+                        )
+                    )
+            self.assertIn("empty response", str(ctx.exception))
+        finally:
+            os.environ.pop("MULTIVERSE_IAM_API_KEY", None)
+            os.unlink(toml_path)
+
+    def test_write_llm_log_creates_jsonl_with_expected_fields(self) -> None:
+        """_write_llm_log appends valid JSON records to llm_calls.jsonl.
+
+        What is being tested:
+            _write_llm_log() creates the log directory, writes a JSONL record
+            with all expected fields, and appends on subsequent calls.
+
+        Why this test matters:
+            Ensures the post-hoc debugging log is reliably written with the
+            expected schema so operators can use jq/tail to diagnose issues.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _write_llm_log(
+                tmpdir, "ollama", "llama3", "/tmp/p.toml", "Be helpful", "hello", "world", None
+            )
+
+            log_file = os.path.join(tmpdir, "llm_calls.jsonl")
+            self.assertTrue(os.path.exists(log_file))
+
+            with open(log_file, encoding="utf-8") as fh:
+                lines = fh.readlines()
+            self.assertEqual(len(lines), 1)
+
+            record = json.loads(lines[0])
+            for key in ("timestamp", "provider", "model", "prompt_path", "system_prompt", "transcript", "response", "error"):
+                self.assertIn(key, record)
+            self.assertEqual(record["provider"], "ollama")
+            self.assertEqual(record["transcript"], "hello")
+
+            # Second call appends a second line.
+            _write_llm_log(
+                tmpdir, "ollama", "llama3", "/tmp/p.toml", "Be helpful", "hello2", "world2", None
+            )
+            with open(log_file, encoding="utf-8") as fh:
+                lines = fh.readlines()
+            self.assertEqual(len(lines), 2)
 
 
 if __name__ == "__main__":

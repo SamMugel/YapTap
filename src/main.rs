@@ -374,6 +374,9 @@ fn main() -> Result<()> {
             None
         };
 
+        let log_dir: Option<std::path::PathBuf> =
+            dirs::home_dir().map(|h| h.join(".config/yaptap/logs"));
+
         let mut llm_cmd = process::Command::new("python3");
         llm_cmd
             .arg("src/core/llm.py")
@@ -386,6 +389,9 @@ fn main() -> Result<()> {
             .stderr(process::Stdio::piped());
         if let Some(ref key) = api_key {
             llm_cmd.env("MULTIVERSE_IAM_API_KEY", key);
+        }
+        if let Some(ref dir) = log_dir {
+            llm_cmd.arg("--log-dir").arg(dir);
         }
         let mut llm_child = llm_cmd
             .spawn()
